@@ -107,7 +107,7 @@ class _PublicationListScreenState extends State<PublicationListScreen> {
                           children: [
                             imageWidget,
                             if (hasCache)
-                              Positioned(
+                              const Positioned(
                                 right: 0,
                                 bottom: 0,
                                 child: Icon(Icons.check_circle,

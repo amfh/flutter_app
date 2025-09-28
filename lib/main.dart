@@ -40,7 +40,7 @@ class MyApp extends StatelessWidget {
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: Color(0xFF2196f3),
+            backgroundColor: const Color(0xFF2196f3),
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -127,9 +127,8 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: 8),
               child: SizedBox(
                 width: 400,
                 child: SubchapterSearchBar(),

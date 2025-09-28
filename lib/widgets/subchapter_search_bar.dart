@@ -3,7 +3,6 @@ import 'package:flutter_app/screens/search_results_screen.dart';
 import '../services/publication_service.dart';
 import '../models/subchapter.dart';
 import '../models/publication.dart';
-import 'search_results_screen.dart';
 
 class SubchapterSearchBar extends StatefulWidget {
   const SubchapterSearchBar({super.key});
@@ -15,7 +14,6 @@ class SubchapterSearchBar extends StatefulWidget {
 class _SubchapterSearchBarState extends State<SubchapterSearchBar> {
   final TextEditingController _controller = TextEditingController();
   bool _isSearching = false;
-  List<Publication> _publications = [];
   Publication? _selectedPublication; // null = alle
 
   @override
@@ -26,10 +24,8 @@ class _SubchapterSearchBarState extends State<SubchapterSearchBar> {
 
   Future<void> _loadPublications() async {
     final service = PublicationService();
-    final pubs = await service.loadPublications();
-    setState(() {
-      _publications = pubs;
-    });
+    await service.loadPublications();
+    setState(() {});
   }
 
   Future<List<SubChapter>> _search(String query) async {

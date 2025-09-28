@@ -1,5 +1,4 @@
 import '../models/subchapter_detail.dart';
-import '../models/subchapter.dart';
 import 'local_storage_service.dart';
 
 dynamic _findSubChapterJson(dynamic chaptersJson, String subChapterId) {
@@ -18,7 +17,7 @@ dynamic _findSubChapterJson(dynamic chaptersJson, String subChapterId) {
 
 Future<SubChapterDetail?> getOfflineSubChapterDetail(
     String bookId, String subChapterId) async {
-  final fullContentFile = 'fullcontent_${bookId}.json';
+  final fullContentFile = 'fullcontent_$bookId.json';
   final fullContent = await LocalStorageService.readJson(fullContentFile);
   if (fullContent == null) return null;
   List<dynamic> chaptersJson = [];

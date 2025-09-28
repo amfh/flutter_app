@@ -176,17 +176,18 @@ class _PublicationDetailScreenState extends State<PublicationDetailScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(
+                  const CircularProgressIndicator(
                     valueColor:
                         AlwaysStoppedAnimation<Color>(Color(0xFF2196F3)),
                   ),
-                  SizedBox(height: 24),
+                  const SizedBox(height: 24),
                   Container(
-                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 12),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.95),
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
+                      boxShadow: const [
                         BoxShadow(
                           color: Colors.black12,
                           blurRadius: 8,
@@ -194,7 +195,7 @@ class _PublicationDetailScreenState extends State<PublicationDetailScreen> {
                         ),
                       ],
                     ),
-                    child: Text(
+                    child: const Text(
                       'Laster ned publikasjonsdata',
                       style: TextStyle(
                         color: Color(0xFF2196F3),

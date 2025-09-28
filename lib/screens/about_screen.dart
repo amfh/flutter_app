@@ -9,16 +9,16 @@ class AboutScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Om appen'),
       ),
-      body: Center(
+      body: const Center(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: EdgeInsets.all(24.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(Icons.info_outline, size: 64, color: Color(0xFF2196F3)),
-              const SizedBox(height: 24),
-              const Text(
+              SizedBox(height: 24),
+              Text(
                 'Kompetansebiblioteket',
                 style: TextStyle(
                   fontSize: 24,
@@ -26,14 +26,14 @@ class AboutScreen extends StatelessWidget {
                   color: Color(0xFF2196F3),
                 ),
               ),
-              const SizedBox(height: 16),
-              const Text(
+              SizedBox(height: 16),
+              Text(
                 'Denne appen gir deg tilgang til digitale publikasjoner, kapitler og underkapitler fra Kompetansebiblioteket. Du kan laste ned innhold for offline bruk, lagre bokmerker og utforske kunnskap på en moderne og brukervennlig måte.',
                 style: TextStyle(fontSize: 16),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 32),
-              const Text(
+              SizedBox(height: 32),
+              Text(
                 'Versjon 1.0.0',
                 style: TextStyle(fontSize: 14, color: Colors.grey),
               ),

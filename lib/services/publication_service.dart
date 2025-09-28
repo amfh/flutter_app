@@ -18,7 +18,7 @@ class PublicationService {
       final url = Uri.parse("https://kompetansebiblioteket.no$imageUrl");
       final response = await http.get(url);
       if (response.statusCode == 200) {
-        final filename = 'pubimg_${publicationId}.img';
+        final filename = 'pubimg_$publicationId.img';
         await LocalStorageService.writeImage(filename, response.bodyBytes);
         return await LocalStorageService.readImageFile(filename);
       }
@@ -30,13 +30,13 @@ class PublicationService {
 
   // Get cached image file for publication
   Future<File?> getCachedImageFile(String publicationId) async {
-    final filename = 'pubimg_${publicationId}.img';
+    final filename = 'pubimg_$publicationId.img';
     return await LocalStorageService.readImageFile(filename);
   }
 
   // Sjekk om full content cache finnes for en publikasjon
   Future<bool> hasFullContentCache(String publicationId) async {
-    final filename = 'fullcontent_${publicationId}.json';
+    final filename = 'fullcontent_$publicationId.json';
     final data = await LocalStorageService.readJson(filename);
     return data != null;
   }
@@ -54,7 +54,7 @@ class PublicationService {
     if (response.statusCode == 200 &&
         (trimmed.startsWith('{') || trimmed.startsWith('['))) {
       final data = jsonDecode(response.body);
-      final filename = 'fullcontent_${publicationId}.json';
+      final filename = 'fullcontent_$publicationId.json';
       await LocalStorageService.writeJson(filename, data);
       print('Fullcontent lagret til $filename');
     } else {
@@ -145,8 +145,8 @@ class PublicationService {
   // Hent subchapters fra API (ikke cache)
   Future<List<SubChapter>> fetchSubChaptersFromApi(String chapterId) async {
     String id = chapterId;
-    if (!id.startsWith('{')) id = '{' + id;
-    if (!id.endsWith('}')) id = id + '}';
+    if (!id.startsWith('{')) id = '{$id';
+    if (!id.endsWith('}')) id = '$id}';
     final url = Uri.parse(
         'https://kompetansebiblioteket.no/SkarlandAppService.asmx/BookSubChapterList?chapterID=$id');
     final response = await http.get(url);
@@ -161,8 +161,8 @@ class PublicationService {
   // Hent detaljer for et subkapittel
   Future<SubChapterDetail> fetchSubChapterDetail(String subchapterId) async {
     String id = subchapterId;
-    if (!id.startsWith('{')) id = '{' + id;
-    if (!id.endsWith('}')) id = id + '}';
+    if (!id.startsWith('{')) id = '{$id';
+    if (!id.endsWith('}')) id = '$id}';
     final url = Uri.parse(
         'https://kompetansebiblioteket.no/SkarlandAppService.asmx/BookSubChapter?subchapterID=$id');
     final response = await http.get(url);
@@ -186,7 +186,7 @@ class PublicationService {
 
   // Hent kapitler KUN fra lagret fullcontent-fil
   Future<List<Chapter>> fetchChapters(String bookId) async {
-    final fullContentFile = 'fullcontent_${bookId}.json';
+    final fullContentFile = 'fullcontent_$bookId.json';
     final fullContent = await LocalStorageService.readJson(fullContentFile);
     print(
         'Leser fra $fullContentFile, data: ${fullContent != null ? 'OK' : 'null'}');
@@ -212,7 +212,7 @@ class PublicationService {
   // Hent subchapters KUN fra lagret fullcontent-fil
   Future<List<SubChapter>> fetchSubChapters(
       String chapterId, String bookId) async {
-    final fullContentFile = 'fullcontent_${bookId}.json';
+    final fullContentFile = 'fullcontent_$bookId.json';
     final fullContent = await LocalStorageService.readJson(fullContentFile);
     if (fullContent == null) {
       throw Exception('Ingen lagret fullcontent-data for denne publikasjonen.');
