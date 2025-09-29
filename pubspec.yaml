@@ -16,11 +16,8 @@ dependencies:
   http: ^1.2.0
   path_provider: ^2.1.5
   shared_preferences: ^2.5.3
-
   connectivity_plus: ^7.0.0
-
-  flutter_appauth: ^7.0.1
-  url_launcher: ^6.2.5
+  aad_b2c_webview: ^0.1.0
   jwt_decoder: ^2.0.1
 flutter:
   uses-material-design: true
