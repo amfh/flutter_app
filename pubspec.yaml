@@ -19,10 +19,12 @@ dependencies:
 
   connectivity_plus: ^7.0.0
 
-  openid_client: ^0.4.7
+  flutter_appauth: ^7.0.1
   url_launcher: ^6.2.5
-
+  jwt_decoder: ^2.0.1
 flutter:
   uses-material-design: true
   assets:
     - assets/publications.json
+
+# Run 'flutter pub get' to install the new dependencies.
