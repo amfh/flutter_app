@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'screens/publication_list_screen.dart';
 import 'widgets/main_scaffold.dart';
 import 'widgets/subchapter_search_bar.dart';
+import 'package:openid_client/openid_client_io.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 void main() {
   runApp(const MyApp());
@@ -119,6 +121,63 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  Future<void> _login(BuildContext context) async {
+    const String clientId = "49eb6aeb-650f-4da9-967b-bb39d8b7ebd0";
+    final String authority =
+        "https://nemiteks4prod.b2clogin.com/nemiteks4prod.onmicrosoft.com/tfp/b2c_1_signin/v2.0";
+    final String redirectUri =
+        (Theme.of(context).platform == TargetPlatform.android ||
+                Theme.of(context).platform == TargetPlatform.iOS)
+            ? "myapp://auth"
+            : "http://localhost";
+    final List<String> scopes = [
+      "openid",
+      "offline_access",
+      "profile",
+    ];
+
+    try {
+      var issuer = await Issuer.discover(Uri.parse(authority));
+      var client = Client(issuer, clientId);
+
+      var authenticator = Authenticator(
+        client,
+        scopes: scopes,
+        port: 4000, // only for localhost
+        redirectUri: Uri.parse(redirectUri),
+        urlLancher: (String url) async {
+          final uri = Uri.parse(url);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        },
+      );
+
+      var c = await authenticator.authorize();
+      var token = await c.getTokenResponse();
+      // TODO: Lagre token og bruk det i appen
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Innlogging vellykket!')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Innlogging feilet: $e')),
+      );
+    }
+  }
+
+  void _testLaunchUrl() async {
+    final uri = Uri.parse('https://flutter.dev');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      // ignore: use_build_context_synchronously
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kunne ikke åpne nettleser!')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MainScaffold(
@@ -135,6 +194,16 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () => _login(context),
+              child: const Text('Logg inn med B2C'),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: _testLaunchUrl,
+              child: const Text('Test åpne nettside'),
+            ),
+            const SizedBox(height: 12),
             ElevatedButton(
               onPressed: () {
                 Navigator.push(
