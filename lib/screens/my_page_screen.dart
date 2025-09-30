@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import '../main.dart';
+import '../services/publication_access_service.dart';
 
 class MyPageScreen extends StatefulWidget {
   final String? idToken;
@@ -195,6 +196,120 @@ class _MyPageScreenState extends State<MyPageScreen> {
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Tilgjengelige publikasjoner
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.library_books,
+                          size: 32,
+                          color: Theme.of(context).primaryColor,
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Tilgjengelige publikasjoner',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(),
+                    FutureBuilder<Map<String, dynamic>>(
+                      future:
+                          Future.value(PublicationAccessService.getDebugInfo()),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          final debugInfo = snapshot.data!;
+                          final accessiblePublications =
+                              debugInfo['accessiblePublications'] as List;
+                          final totalPublications =
+                              debugInfo['totalPublications'] as int;
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Du har tilgang til ${accessiblePublications.length} av $totalPublications publikasjoner',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              if (accessiblePublications.isNotEmpty) ...[
+                                const Text(
+                                  'Dine tilgjengelige publikasjoner:',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                ...accessiblePublications
+                                    .take(5)
+                                    .map(
+                                      (pubTitle) => Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 2.0),
+                                        child: Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.book,
+                                              color: Colors.blue,
+                                              size: 16,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                pubTitle,
+                                                style: const TextStyle(
+                                                    fontSize: 14),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                                if (accessiblePublications.length > 5)
+                                  Text(
+                                    '... og ${accessiblePublications.length - 5} flere',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontStyle: FontStyle.italic,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                              ] else
+                                const Text(
+                                  'Ingen publikasjoner tilgjengelig med dine nåværende tilganger',
+                                  style: TextStyle(
+                                    fontStyle: FontStyle.italic,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                            ],
+                          );
+                        } else {
+                          return const Text('Laster tilgangsinformasjon...');
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
             ),

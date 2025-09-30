@@ -8,6 +8,7 @@ import '../models/chapter.dart';
 import '../models/subchapter.dart';
 import '../models/subchapter_detail.dart';
 import 'local_storage_service.dart';
+import 'publication_access_service.dart';
 
 class PublicationService {
   // Download and cache publication image
@@ -181,7 +182,12 @@ class PublicationService {
     final String response =
         await rootBundle.loadString('assets/publications.json');
     final List<dynamic> data = jsonDecode(response);
-    return data.map((json) => Publication.fromJson(json)).toList();
+
+    // Filtrer publikasjoner basert på brukerens tilganger
+    final filteredData = PublicationAccessService.filterPublicationsByAccess(
+        data.cast<Map<String, dynamic>>());
+
+    return filteredData.map((json) => Publication.fromJson(json)).toList();
   }
 
   // Hent kapitler KUN fra lagret fullcontent-fil
