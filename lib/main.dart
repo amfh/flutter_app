@@ -5,6 +5,41 @@ import 'widgets/subchapter_search_bar.dart';
 import 'package:aad_b2c_webview/aad_b2c_webview.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 
+// Singleton for storing user session information
+class UserSession {
+  static final UserSession _instance = UserSession._internal();
+  static UserSession get instance => _instance;
+  UserSession._internal();
+
+  String? idToken;
+  String? accessToken;
+  String? refreshToken;
+  String? userEmail;
+  String? userName;
+
+  void updateTokens({
+    String? idToken,
+    String? accessToken,
+    String? refreshToken,
+    String? userEmail,
+    String? userName,
+  }) {
+    this.idToken = idToken;
+    this.accessToken = accessToken;
+    this.refreshToken = refreshToken;
+    this.userEmail = userEmail;
+    this.userName = userName;
+  }
+
+  void clearSession() {
+    idToken = null;
+    accessToken = null;
+    refreshToken = null;
+    userEmail = null;
+    userName = null;
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Injections.initialize();
@@ -80,14 +115,25 @@ class _HomePageState extends State<HomePage> {
     if (idToken != null && idToken.value != null) {
       try {
         Map<String, dynamic> decodedToken = JwtDecoder.decode(idToken.value!);
+        final userEmail = decodedToken['email'] ??
+            decodedToken['emails']?.first ??
+            'Ikke funnet';
+        final userName =
+            decodedToken['name'] ?? decodedToken['given_name'] ?? 'Ikke funnet';
+
         setState(() {
-          _userEmail = decodedToken['email'] ??
-              decodedToken['emails']?.first ??
-              'Ikke funnet';
-          _userName = decodedToken['name'] ??
-              decodedToken['given_name'] ??
-              'Ikke funnet';
+          _userEmail = userEmail;
+          _userName = userName;
         });
+
+        // Store in UserSession for global access
+        UserSession.instance.updateTokens(
+          idToken: idToken.value,
+          accessToken: accessToken.value,
+          refreshToken: refreshToken?.value,
+          userEmail: userEmail,
+          userName: userName,
+        );
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Innlogget som: $_userEmail')),

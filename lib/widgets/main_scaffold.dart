@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_app/screens/about_screen.dart';
 import '../screens/publication_list_screen.dart';
 import '../screens/bookmarks_screen.dart';
+import '../screens/my_page_screen.dart';
 import '../main.dart';
 
 import 'internet_status_icon.dart';
@@ -72,6 +73,22 @@ class MainScaffold extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const BookmarksScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.account_circle),
+              title: const Text('Min side'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MyPageScreen(
+                      idToken: UserSession.instance.idToken,
+                      userEmail: UserSession.instance.userEmail,
+                    ),
+                  ),
                 );
               },
             ),
