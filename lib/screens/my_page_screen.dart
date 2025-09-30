@@ -285,9 +285,9 @@ class _MyPageScreenState extends State<MyPageScreen> {
               child: const Text('Avbryt'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 // Tøm UserSession
-                UserSession.instance.clearSession();
+                await UserSession.instance.clearSession();
 
                 // Lukk dialog og gå tilbake til hovedskjerm
                 Navigator.of(context).pop();

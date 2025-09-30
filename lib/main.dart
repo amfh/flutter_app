@@ -1,11 +1,11 @@
 ﻿import 'package:flutter/material.dart';
 import 'screens/publication_list_screen.dart';
 import 'widgets/main_scaffold.dart';
-import 'widgets/subchapter_search_bar.dart';
 import 'package:aad_b2c_webview/aad_b2c_webview.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-// Singleton for storing user session information
+// Singleton for storing user session information with persistent storage
 class UserSession {
   static final UserSession _instance = UserSession._internal();
   static UserSession get instance => _instance;
@@ -16,33 +16,82 @@ class UserSession {
   String? refreshToken;
   String? userEmail;
   String? userName;
+  bool _isInitialized = false;
 
-  void updateTokens({
+  // Initialize session from persistent storage
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    idToken = prefs.getString('idToken');
+    accessToken = prefs.getString('accessToken');
+    refreshToken = prefs.getString('refreshToken');
+    userEmail = prefs.getString('userEmail');
+    userName = prefs.getString('userName');
+
+    _isInitialized = true;
+  }
+
+  // Check if user is logged in
+  Future<bool> isLoggedIn() async {
+    await initialize();
+    return idToken != null && idToken!.isNotEmpty;
+  }
+
+  // Update tokens and save to persistent storage
+  Future<void> updateTokens({
     String? idToken,
     String? accessToken,
     String? refreshToken,
     String? userEmail,
     String? userName,
-  }) {
-    this.idToken = idToken;
-    this.accessToken = accessToken;
-    this.refreshToken = refreshToken;
-    this.userEmail = userEmail;
-    this.userName = userName;
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (idToken != null) {
+      this.idToken = idToken;
+      await prefs.setString('idToken', idToken);
+    }
+    if (accessToken != null) {
+      this.accessToken = accessToken;
+      await prefs.setString('accessToken', accessToken);
+    }
+    if (refreshToken != null) {
+      this.refreshToken = refreshToken;
+      await prefs.setString('refreshToken', refreshToken);
+    }
+    if (userEmail != null) {
+      this.userEmail = userEmail;
+      await prefs.setString('userEmail', userEmail);
+    }
+    if (userName != null) {
+      this.userName = userName;
+      await prefs.setString('userName', userName);
+    }
   }
 
-  void clearSession() {
+  // Clear session and remove from persistent storage
+  Future<void> clearSession() async {
+    final prefs = await SharedPreferences.getInstance();
+
     idToken = null;
     accessToken = null;
     refreshToken = null;
     userEmail = null;
     userName = null;
+
+    await prefs.remove('idToken');
+    await prefs.remove('accessToken');
+    await prefs.remove('refreshToken');
+    await prefs.remove('userEmail');
+    await prefs.remove('userName');
   }
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Injections.initialize();
+  await UserSession.instance.initialize();
   runApp(const MyApp());
 }
 
@@ -59,8 +108,54 @@ class MyApp extends StatelessWidget {
           primary: const Color(0xFF2196f3),
         ),
       ),
-      home: const HomePage(),
+      home: const AuthWrapper(),
     );
+  }
+}
+
+class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  bool _isLoading = true;
+  bool _isLoggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLoginStatus();
+  }
+
+  Future<void> _checkLoginStatus() async {
+    final isLoggedIn = await UserSession.instance.isLoggedIn();
+    setState(() {
+      _isLoggedIn = isLoggedIn;
+      _isLoading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_isLoggedIn) {
+      return const MainScaffold(
+        title: 'Kompetansebiblioteket',
+        body: PublicationListScreen(),
+      );
+    } else {
+      return const HomePage();
+    }
   }
 }
 
@@ -72,7 +167,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  String? _accessToken;
   String? _userEmail;
   String? _userName;
 
@@ -102,16 +196,12 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _onLoginSuccess(
+  Future<void> _onLoginSuccess(
     BuildContext context,
     accessToken,
     idToken,
     refreshToken,
-  ) {
-    setState(() {
-      _accessToken = accessToken.value;
-    });
-
+  ) async {
     if (idToken != null && idToken.value != null) {
       try {
         Map<String, dynamic> decodedToken = JwtDecoder.decode(idToken.value!);
@@ -126,8 +216,8 @@ class _HomePageState extends State<HomePage> {
           _userName = userName;
         });
 
-        // Store in UserSession for global access
-        UserSession.instance.updateTokens(
+        // Store in UserSession for global access with persistent storage
+        await UserSession.instance.updateTokens(
           idToken: idToken.value,
           accessToken: accessToken.value,
           refreshToken: refreshToken?.value,
@@ -138,6 +228,17 @@ class _HomePageState extends State<HomePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Innlogget som: $_userEmail')),
         );
+
+        // Navigate to main app screen
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (context) => const MainScaffold(
+              title: 'Kompetansebiblioteket',
+              body: PublicationListScreen(),
+            ),
+          ),
+          (route) => false,
+        );
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -146,9 +247,9 @@ class _HomePageState extends State<HomePage> {
           ),
         );
       }
+    } else {
+      Navigator.pop(context);
     }
-
-    Navigator.pop(context);
   }
 
   void _onLoginError(BuildContext context, String? error) {
