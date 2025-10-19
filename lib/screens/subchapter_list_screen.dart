@@ -90,6 +90,7 @@ class _SubChapterListScreenState extends State<SubChapterListScreen> {
                               webUrl: s.webUrl,
                               number: s.number,
                               bookId: widget.publicationId,
+                              text: s.text,
                             )
                           : s)
                       .toList();

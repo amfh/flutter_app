@@ -7,7 +7,7 @@ import '../main.dart';
 
 import 'internet_status_icon.dart';
 
-class MainScaffold extends StatelessWidget {
+class MainScaffold extends StatefulWidget {
   final Widget body;
   final String title;
   final List<Widget>? actions;
@@ -19,13 +19,47 @@ class MainScaffold extends StatelessWidget {
   });
 
   @override
+  State<MainScaffold> createState() => _MainScaffoldState();
+}
+
+class _MainScaffoldState extends State<MainScaffold> {
+  bool _isLoggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLoginStatus();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Check login status when dependencies change (e.g., when navigating back)
+    _checkLoginStatus();
+  }
+
+  Future<void> _checkLoginStatus() async {
+    final isLoggedIn = await UserSession.instance.isLoggedIn();
+    if (mounted) {
+      setState(() {
+        _isLoggedIn = isLoggedIn;
+      });
+    }
+  }
+
+  // Method to refresh login status when returning from login page
+  void _refreshLoginStatus() {
+    _checkLoginStatus();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
+        title: Text(widget.title),
         actions: [
           const InternetStatusIcon(),
-          if (actions != null) ...actions!,
+          if (widget.actions != null) ...widget.actions!,
         ],
       ),
       drawer: Drawer(
@@ -38,18 +72,6 @@ class MainScaffold extends StatelessWidget {
                 'Meny',
                 style: TextStyle(color: Colors.white, fontSize: 24),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Startside'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (_) => const HomePage()),
-                  (route) => false,
-                );
-              },
             ),
             ListTile(
               leading: const Icon(Icons.menu_book),
@@ -93,6 +115,22 @@ class MainScaffold extends StatelessWidget {
               },
             ),
             ListTile(
+              leading: Icon(_isLoggedIn ? Icons.check_circle : Icons.login),
+              title: Text(_isLoggedIn ? 'Logget inn' : 'Logg inn'),
+              onTap: _isLoggedIn
+                  ? null
+                  : () async {
+                      Navigator.pop(context);
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const B2CLoginPageWrapper()),
+                      );
+                      // Refresh login status when returning from login page
+                      _refreshLoginStatus();
+                    },
+            ),
+            ListTile(
               leading: const Icon(Icons.info_outline),
               title: const Text('Om appen'),
               onTap: () {
@@ -106,7 +144,7 @@ class MainScaffold extends StatelessWidget {
           ],
         ),
       ),
-      body: body,
+      body: widget.body,
     );
   }
 }
