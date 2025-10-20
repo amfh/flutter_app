@@ -1,15 +1,16 @@
-name: flutter_app
+name: kompetansebiblioteket
 description: A Flutter app for listing VVS publications
 publish_to: "none"
 
 environment:
-  sdk: ">=2.17.0 <4.0.0"
+  sdk: ">=3.0.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
   flutter_html: ^3.0.0
   flutter_lints: ^6.0.0
+  flutter_math_fork: ^0.7.2
   flutter_test:
     sdk: flutter
   html_unescape: ^2.0.0
@@ -19,9 +20,26 @@ dependencies:
   connectivity_plus: ^7.0.0
   aad_b2c_webview: ^0.1.0
   jwt_decoder: ^2.0.1
+  webview_flutter: ^4.0.7
+
+dev_dependencies:
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  min_sdk_android: 21
+  web:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+    background_color: "#2196f3"
+    theme_color: "#2196f3"
+
 flutter:
   uses-material-design: true
   assets:
     - assets/publications.json
+    - assets/product_publications_mapping.json
 
 # Run 'flutter pub get' to install the new dependencies.

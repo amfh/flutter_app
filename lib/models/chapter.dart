@@ -10,10 +10,27 @@ class Chapter {
   });
 
   factory Chapter.fromJson(Map<String, dynamic> json) {
+    String title =
+        json['Title'] ?? json['title'] ?? json['Name'] ?? json['name'] ?? '';
+    String id = json['ID'] ?? json['Id'] ?? json['id'] ?? '';
+
+    // If no ID is provided, generate one from the title
+    if (id.isEmpty && title.isNotEmpty) {
+      id = title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+    }
+
     return Chapter(
-      id: json['ID'] ?? '',
-      title: json['Title'] ?? '',
-      url: json['Url'] ?? '',
+      id: id,
+      title: title,
+      url: json['Url'] ?? json['url'] ?? json['URL'] ?? '',
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'ID': id,
+      'Title': title,
+      'Url': url,
+    };
   }
 }

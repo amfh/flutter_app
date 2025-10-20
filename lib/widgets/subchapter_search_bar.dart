@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_app/screens/search_results_screen.dart';
+import 'package:kompetansebiblioteket/screens/search_results_screen.dart';
 import '../services/publication_service.dart';
 import '../models/subchapter.dart';
 import '../models/publication.dart';

@@ -13,6 +13,15 @@ class PublicationAccessService {
       'dc61ca55-f674-4130-5774-08dcdc85085c', // Rørhåndboka, digital, medlem RørNorge
       'a2dd0c91-04c8-47df-be2b-08dd055ab2cc', // Enbrukerpakke, gratis
     ],
+    'Rørhåndboka 2024 Pluss': [
+      'b6c7099d-c57d-43b8-19f5-08dc8d0eb4cf', // Studentpakke
+      'b0429ab1-b47c-473f-8ec3-08dc9c1adbcb', // Enbrukerpakke
+      '65b75dad-8b35-4225-ccdc-08dcde1412be', // KB Total
+      'cd1093d0-6af4-4e1f-8ec9-08dc9c1adbcb', // Rørhåndboka Pluss; digital; standard
+      '51a82c6f-fd8d-4da7-19ee-08dc8d0eb4cf', // Rørhåndboka Pluss; digital; student/lærling
+      'dc61ca55-f674-4130-5774-08dcdc85085c', // Rørhåndboka, digital, medlem RørNorge
+      'a2dd0c91-04c8-47df-be2b-08dd055ab2cc', // Enbrukerpakke, gratis
+    ],
     'Prenøk': [
       'a2dd0c91-04c8-47df-be2b-08dd055ab2cc', // Enbrukerpakke, gratis
       '65b75dad-8b35-4225-ccdc-08dcde1412be', // KB Total
@@ -135,25 +144,46 @@ class PublicationAccessService {
     'Inneklima, FDV og HMS i praksis': [], // Ingen bestemt rolle
   };
 
-  /// Hent brukerens tilgangs-ID-er fra JWT token
+  /// Hent brukerens tilgangs-ID-er fra persisted data (offline-friendly)
   static List<String> getUserAccessIds() {
     try {
       final userSession = UserSession.instance;
-      if (userSession.idToken == null) return [];
 
-      final decodedToken = JwtDecoder.decode(userSession.idToken!);
-      final extensionProducts = decodedToken['extension_Products'];
-
-      if (extensionProducts == null) return [];
-
-      if (extensionProducts is String) {
-        // Hvis det er en kommaseparert streng
-        return extensionProducts.split(',').map((e) => e.trim()).toList();
-      } else if (extensionProducts is List) {
-        // Hvis det allerede er en liste
-        return extensionProducts.cast<String>();
+      // First try to use persisted extension products (offline support)
+      if (userSession.extensionProducts != null &&
+          userSession.extensionProducts!.isNotEmpty) {
+        print(
+            'Using persisted extension products: ${userSession.extensionProducts}');
+        return userSession.extensionProducts!;
       }
 
+      // Fallback to JWT token if available
+      if (userSession.idToken != null) {
+        try {
+          final decodedToken = JwtDecoder.decode(userSession.idToken!);
+          final extensionProducts = decodedToken['extension_Products'];
+
+          if (extensionProducts != null) {
+            List<String> productIds = [];
+
+            if (extensionProducts is String) {
+              // Hvis det er en kommaseparert streng
+              productIds =
+                  extensionProducts.split(',').map((e) => e.trim()).toList();
+            } else if (extensionProducts is List) {
+              // Hvis det allerede er en liste
+              productIds = extensionProducts.cast<String>();
+            }
+
+            print('Using extension products from JWT token: $productIds');
+            return productIds;
+          }
+        } catch (e) {
+          print('Error decoding JWT token for extension products: $e');
+        }
+      }
+
+      print('No extension products found in persisted data or JWT token');
       return [];
     } catch (e) {
       print('Error getting user access IDs: $e');
@@ -164,14 +194,28 @@ class PublicationAccessService {
   /// Sjekk om brukeren har tilgang til en spesifikk publikasjon
   static bool hasAccessToPublication(String publicationTitle) {
     final userAccessIds = getUserAccessIds();
-    final publicationAccessIds = _publicationAccessMap[publicationTitle] ?? [];
 
-    // Hvis publikasjonen ikke har noen tilgangsbegrensninger, gi tilgang
-    if (publicationAccessIds.isEmpty) return true;
+    // Sjekk om publikasjonen finnes i access map
+    if (!_publicationAccessMap.containsKey(publicationTitle)) {
+      print(
+          '⚠️  Publication "$publicationTitle" not found in access map - DENYING access');
+      return false; // Hvis publikasjonen ikke er definert, nekt tilgang
+    }
+
+    final publicationAccessIds = _publicationAccessMap[publicationTitle]!;
+
+    // Hvis publikasjonen eksplisitt har tom liste, gi tilgang (som VVS-TV)
+    if (publicationAccessIds.isEmpty) {
+      print(
+          '✅ Publication "$publicationTitle" has empty access requirements - ALLOWING access');
+      return true;
+    }
 
     // Sjekk om brukeren har minst en av de nødvendige tilgangs-ID-ene
-    return userAccessIds
+    final hasAccess = userAccessIds
         .any((userAccessId) => publicationAccessIds.contains(userAccessId));
+    print('🔍 Publication "$publicationTitle" access check: $hasAccess');
+    return hasAccess;
   }
 
   /// Filtrer en liste med publikasjoner basert på brukerens tilganger
@@ -183,9 +227,15 @@ class PublicationAccessService {
     }).toList();
   }
 
+  /// Get access IDs required for a specific publication
+  static List<String> getAccessIdsForPublication(String publicationTitle) {
+    return _publicationAccessMap[publicationTitle] ?? [];
+  }
+
   /// Debug metode for å se brukerens tilganger
   static Map<String, dynamic> getDebugInfo() {
     final userAccessIds = getUserAccessIds();
+    final userSession = UserSession.instance;
     final accessiblePublications = _publicationAccessMap.entries
         .where((entry) => hasAccessToPublication(entry.key))
         .map((entry) => entry.key)
@@ -195,6 +245,9 @@ class PublicationAccessService {
       'userAccessIds': userAccessIds,
       'accessiblePublications': accessiblePublications,
       'totalPublications': _publicationAccessMap.keys.length,
+      'persistedExtensionProducts': userSession.extensionProducts,
+      'hasIdToken': userSession.idToken != null,
+      'userEmail': userSession.userEmail,
     };
   }
 }

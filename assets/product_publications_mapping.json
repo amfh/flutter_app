@@ -1,0 +1,36 @@
+{
+  "products": {
+    "b0429ab1-b47c-473f-8ec3-08dc9c1adbcb": {
+      "name": "Enbrukerpakke",
+      "description": "Standard tilgang for enkeltstående brukere",
+      "publications": [
+        {
+          "id": "25621b7a-c477-47b6-ac3f-b6553f8a7e95",
+          "title": "Prenøk",
+          "description": "Lover og forskrifter, veiledninger og tabeller"
+        },
+        {
+          "id": "930958df-f71f-404e-96ae-90f317f3e0cd",
+          "title": "Styring og regulering av tekniske anlegg i bygg",
+          "description": "Tekniske anlegg og automatisering"
+        }
+      ]
+    },
+    "a2dd0c91-04c8-47df-be2b-08dd055ab2cc": {
+      "name": "Enbrukerpakke (Gratis)",
+      "description": "Gratis prøveversjon med begrenset tilgang",
+      "publications": [
+        {
+          "id": "25621b7a-c477-47b6-ac3f-b6553f8a7e95",
+          "title": "Prenøk",
+          "description": "Lover og forskrifter, veiledninger og tabeller"
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "version": "1.0",
+    "lastUpdated": "2025-10-17T00:00:00.000Z",
+    "description": "Mapping mellom produkter og tilgjengelige publikasjoner"
+  }
+}
