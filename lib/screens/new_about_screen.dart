@@ -29,7 +29,7 @@ class NewAboutScreen extends StatelessWidget {
                         ),
                         SizedBox(width: 8),
                         Text(
-                          'Kompetansebiblioteket',
+                          'Om Kompetansebiblioteket',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -39,96 +39,43 @@ class NewAboutScreen extends StatelessWidget {
                     ),
                     Divider(),
                     Text(
-                      'Denne appen gir deg tilgang til VVS-publikasjoner offline. '
-                      'Du kan laste ned publikasjoner når du er online og lese dem senere uten internettforbindelse.',
+                      'Kompetansebiblioteket inneholder blant annet:',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    _PublicationItem(title: 'Rørhåndboka'),
+                    _PublicationItem(title: 'Kuldehåndboka'),
+                    _PublicationItem(title: 'Prenøk'),
+                    _PublicationItem(title: 'Ventøk'),
+                    _PublicationItem(
+                        title: 'Vannbaserte oppvarmings- og kjølesystemer'),
+                    _PublicationItem(title: 'Varmenormen'),
+                    SizedBox(height: 16),
+                    Text(
+                      'Det vender seg til alle som jobber innen VVS- og kuldefaget. Søk og oppslag går lynraskt, og dine bokmerker følger deg, uansett hvilken plattform du velger.',
                       style: TextStyle(fontSize: 16),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.help,
-                          color: Colors.green,
-                          size: 24,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Slik bruker du appen',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+                    SizedBox(height: 12),
+                    Text(
+                      'Med Appen har du tilgang til Kompetansebiblioteket, selv om du ikke er tilkoblet Internett.',
+                      style: TextStyle(fontSize: 16),
                     ),
-                    Divider(),
-                    _FeatureItem(
-                      icon: Icons.login,
-                      title: 'Logg inn',
-                      description:
-                          'Logg inn med din Azure AD-konto for å få tilgang til publikasjoner.',
+                    SizedBox(height: 12),
+                    Text(
+                      'Alle kan søke i Kompetansebiblioteket, men tilgang til innholdet krever et abonnement.',
+                      style: TextStyle(fontSize: 16),
                     ),
-                    _FeatureItem(
-                      icon: Icons.download,
-                      title: 'Last ned publikasjoner',
-                      description:
-                          'Gå til Min side for å laste ned publikasjoner til offline bruk.',
+                    SizedBox(height: 16),
+                    Text(
+                      'Løsningen utgis av Skarland Press AS og er utviklet av Raskweb.',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
-                    _FeatureItem(
-                      icon: Icons.library_books,
-                      title: 'Les offline',
-                      description:
-                          'Åpne Publikasjoner for å lese nedlastede publikasjoner.',
-                    ),
-                    _FeatureItem(
-                      icon: Icons.sync,
-                      title: 'Hold deg oppdatert',
-                      description:
-                          'Sjekk Min side regelmessig for oppdateringer av publikasjoner.',
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.settings,
-                          color: Colors.orange,
-                          size: 24,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Teknisk informasjon',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Divider(),
-                    _InfoRow(label: 'Versjon', value: '2.0.0'),
-                    _InfoRow(label: 'Plattform', value: 'Flutter'),
-                    _InfoRow(label: 'Pålogging', value: 'Azure AD B2C'),
-                    _InfoRow(label: 'Offline støtte', value: 'Ja'),
                   ],
                 ),
               ),
@@ -140,78 +87,32 @@ class NewAboutScreen extends StatelessWidget {
   }
 }
 
-class _FeatureItem extends StatelessWidget {
-  final IconData icon;
+class _PublicationItem extends StatelessWidget {
   final String title;
-  final String description;
 
-  const _FeatureItem({
-    required this.icon,
+  const _PublicationItem({
     required this.title,
-    required this.description,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
+      padding: const EdgeInsets.only(bottom: 4.0, left: 16.0),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            icon,
-            size: 20,
-            color: Colors.grey[600],
+            Icons.book,
+            size: 16,
+            color: Colors.blue[600],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  description,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _InfoRow({
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Row(
-        children: [
-          Text(
-            '$label: ',
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-          Text(value),
         ],
       ),
     );

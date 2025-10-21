@@ -1,6 +1,5 @@
 ﻿import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import '../models/publication.dart';
@@ -8,6 +7,7 @@ import '../main.dart';
 import 'publication_service.dart';
 import 'local_storage_service.dart';
 import 'publication_access_service.dart';
+import 'api_client.dart';
 
 class UpdateCheckService {
   static final UpdateCheckService _instance = UpdateCheckService._internal();
@@ -61,13 +61,7 @@ class UpdateCheckService {
         try {
           print('🌐 Trying API URL: $url');
 
-          final httpClient = HttpClient()
-            ..badCertificateCallback = (cert, host, port) => true;
-
-          final request = await httpClient.getUrl(Uri.parse(url));
-          request.headers.set('Content-Type', 'application/json');
-          final response =
-              await request.close().timeout(const Duration(seconds: 10));
+          final response = await ApiClient.instance.get(url);
 
           if (response.statusCode == 200) {
             final responseBody = await response.transform(utf8.decoder).join();

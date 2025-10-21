@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../models/new_publication.dart';
+import 'api_client.dart';
 
 class NewPublicationService {
   static NewPublicationService? _instance;
@@ -26,17 +27,10 @@ class NewPublicationService {
     ];
 
     for (String url in urls) {
-      HttpClient? httpClient;
       try {
         print('🌐 Trying API URL: $url');
 
-        httpClient = HttpClient();
-        httpClient.badCertificateCallback = (cert, host, port) => true;
-
-        final uri = Uri.parse(url);
-
-        final response =
-            await httpClient.getUrl(uri).then((request) => request.close());
+        final response = await ApiClient.instance.get(url);
 
         if (response.statusCode == 200) {
           final responseBody = await response.transform(utf8.decoder).join();
@@ -48,16 +42,12 @@ class NewPublicationService {
 
           print(
               '📚 Successfully fetched ${publications.length} publications from $url');
-          httpClient.close();
           return publications;
         } else {
           print('❌ API error from $url: ${response.statusCode}');
         }
-
-        httpClient.close();
       } catch (e) {
         print('❌ Error fetching from $url: $e');
-        httpClient?.close();
         continue; // Try next URL
       }
     }
@@ -77,17 +67,10 @@ class NewPublicationService {
       'https://nye.kompetansebiblioteket.no/umbraco/api/AppApi/GetPublicationsByPublicationId?publicationId=$publicationId',
     ];
     for (String url in urls) {
-      HttpClient? httpClient;
       try {
         print('🌐 Trying content URL: $url');
 
-        httpClient = HttpClient();
-        httpClient.badCertificateCallback = (cert, host, port) => true;
-
-        final uri = Uri.parse(url);
-
-        final response =
-            await httpClient.getUrl(uri).then((request) => request.close());
+        final response = await ApiClient.instance.get(url);
 
         if (response.statusCode == 200) {
           final responseBody = await response.transform(utf8.decoder).join();
@@ -99,16 +82,12 @@ class NewPublicationService {
 
           print(
               '📖 Successfully fetched ${chapters.length} chapters from $url');
-          httpClient.close();
           return chapters;
         } else {
           print('❌ Content API error from $url: ${response.statusCode}');
         }
-
-        httpClient.close();
       } catch (e) {
         print('❌ Error fetching content from $url: $e');
-        httpClient?.close();
         continue; // Try next URL
       }
     }
@@ -363,7 +342,7 @@ class NewPublicationService {
         final imageUrl = urlsList[i];
         final progress = 0.2 + (i / urlsList.length) * 0.7;
 
-        print('📥 === DOWNLOADING IMAGE ${i + 1}/${totalImages} ===');
+        print('📥 === DOWNLOADING IMAGE ${i + 1}/$totalImages ===');
         print('🔗 URL: $imageUrl');
         onProgress(progress, 'Laster ned bilde ${i + 1} av $totalImages');
 
@@ -549,7 +528,7 @@ class NewPublicationService {
                 final end =
                     (firstFileMatch + 80).clamp(0, subchapter.text.length);
                 final sample = subchapter.text.substring(start, end);
-                print('📝 Sample updated content: ...${sample}...');
+                print('📝 Sample updated content: ...$sample...');
                 return; // Show only first example
               }
             }
@@ -565,13 +544,7 @@ class NewPublicationService {
   List<String> _extractImageUrlsFromHtml(String htmlContent) {
     final imageUrls = <String>[];
     final imgRegex = RegExp(
-        r'<img[^>]+src=["' +
-            "'" +
-            r']([^"' +
-            "'" +
-            r'>]+)["' +
-            "'" +
-            r'][^>]*>',
+        r'<img[^>]+src=["' "'" r']([^"' "'" + r'>]+)["' + "'" + r'][^>]*>',
         caseSensitive: false);
     final matches = imgRegex.allMatches(htmlContent);
 
@@ -624,14 +597,10 @@ class NewPublicationService {
   Future<void> _downloadAndCacheImageAsFile(
       String imageUrl, String publicationId, int index,
       [Function()? isCancelled]) async {
-    HttpClient? httpClient;
     try {
       print('🖼️ === DOWNLOADING SINGLE IMAGE ===');
       print('🔢 Image index: $index');
       print('🔗 Original URL: $imageUrl');
-
-      httpClient = HttpClient();
-      httpClient.badCertificateCallback = (cert, host, port) => true;
 
       // Fix localhost URLs for Android emulator
       final fixedUrl = imageUrl.replaceAll(
@@ -643,14 +612,6 @@ class NewPublicationService {
 
       // Add mobile optimization parameters
       final originalUri = Uri.parse(fullUrl);
-      final optimizedUri = originalUri.replace(
-        queryParameters: {
-          ...originalUri.queryParameters,
-          'width': '400',
-          'quality': '70',
-          'format': 'webp',
-        },
-      );
       fullUrl = originalUri.toString();
 
       print('🔧 Fixed URL: $fixedUrl');
@@ -669,9 +630,7 @@ class NewPublicationService {
       }
 
       print('📞 Making HTTP request...');
-      final request = await httpClient.getUrl(uri);
-      print('⏳ Waiting for response...');
-      final response = await request.close();
+      final response = await ApiClient.instance.get(fullUrl);
 
       print('📊 Response status: ${response.statusCode}');
       print('📏 Content length: ${response.contentLength}');
@@ -715,9 +674,7 @@ class NewPublicationService {
       }
     } catch (e) {
       print('❌ Error downloading image $index: $e');
-      throw e;
-    } finally {
-      httpClient?.close();
+      rethrow;
     }
   }
 
@@ -800,7 +757,7 @@ class NewPublicationService {
   // Check if images are downloaded for a publication
   Future<bool> areImagesDownloaded(String publicationId) async {
     try {
-      final filename = 'publikasjon_${publicationId}.json';
+      final filename = 'publikasjon_$publicationId.json';
       final directory = await getApplicationDocumentsDirectory();
       final file = File('${directory.path}/$filename');
 

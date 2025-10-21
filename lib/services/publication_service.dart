@@ -11,6 +11,7 @@ import '../models/subchapter_detail.dart';
 import 'local_storage_service.dart';
 import 'publication_access_service.dart';
 import 'offline_download_service.dart';
+import 'api_client.dart';
 
 class PublicationService {
   // HTTP client that accepts self-signed certificates for localhost
@@ -249,30 +250,10 @@ class PublicationService {
   // Download and cache a single image for content
   Future<void> _downloadAndCacheContentImage(
       String imageUrl, String publicationId, int index) async {
-    HttpClient? httpClient;
     try {
       print('🖼️ Downloading content image $index: $imageUrl');
 
-      // Use custom HTTP client for our localhost URLs
-      httpClient = HttpClient()
-        ..connectionTimeout = const Duration(seconds: 30)
-        ..badCertificateCallback =
-            (X509Certificate cert, String host, int port) {
-          print(
-              '🔒 SSL certificate check for $host:$port - allowing localhost');
-          return host == 'localhost' ||
-              host == '127.0.0.1' ||
-              host == '10.0.2.2';
-        };
-
-      final Uri uri = Uri.parse(imageUrl);
-      print('📡 Making HTTP request to: $uri');
-
-      final HttpClientRequest request = await httpClient.getUrl(uri);
-      request.headers.set('Accept', 'image/*');
-      request.headers.set('User-Agent', 'Flutter-App/1.0');
-
-      final HttpClientResponse response = await request.close();
+      final response = await ApiClient.instance.get(imageUrl);
       print('📥 Response status: ${response.statusCode}');
       print('📥 Response headers: ${response.headers}');
 
@@ -315,8 +296,6 @@ class PublicationService {
     } catch (e) {
       print('💥 Error downloading image $imageUrl: $e');
       rethrow; // Re-throw to be caught by the caller
-    } finally {
-      httpClient?.close();
     }
   }
 

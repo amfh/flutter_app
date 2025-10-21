@@ -218,7 +218,7 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
                 final end =
                     (firstFileMatch + 80).clamp(0, subchapter.text.length);
                 final sample = subchapter.text.substring(start, end);
-                print('🔍 DEBUG: Sample file:// reference: ...${sample}...');
+                print('🔍 DEBUG: Sample file:// reference: ...$sample...');
                 return; // Show only first example
               }
             }
@@ -230,63 +230,6 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
       }
     } catch (e) {
       print('❌ DEBUG: Error checking JSON file: $e');
-    }
-  }
-
-  // Force update image links in JSON file
-  Future<void> _forceUpdateImageLinks() async {
-    try {
-      print('🔄 Force updating image links...');
-
-      // Show loading dialog
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 20),
-              Text('Oppdaterer bildelenker...'),
-            ],
-          ),
-        ),
-      );
-
-      // Force re-download of images to update JSON
-      await NewPublicationService.instance.downloadImagesForPublication(
-        widget.publication.id,
-        onProgress: (progress, status) {
-          print('🔄 Progress: ${(progress * 100).toInt()}% - $status');
-        },
-      );
-
-      // Reload content
-      await _loadUpdatedContent();
-
-      // Close loading dialog
-      Navigator.of(context).pop();
-
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bildelenker oppdatert!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      // Close loading dialog if it's open
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-
-      print('❌ Error force updating image links: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Feil ved oppdatering: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
 
@@ -515,58 +458,14 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
   // Helper: Build content with images only
   List<Widget> _buildContentWithImages(
       String htmlContent, BuildContext context) {
-    List<Widget> widgets = [];
-
     // Check for images
     if (htmlContent.contains('<img')) {
       print('🔍 DEBUG: Found <img> tags in content, using image-aware parsing');
 
-      // Add debug info at the top
-      final debugInfo = Container(
-        margin: const EdgeInsets.all(8),
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.blue[50],
-          border: Border.all(color: Colors.blue[300]!),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'DEBUG: Bildeinnhold oppdaget',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.blue[700],
-              ),
-            ),
-            Text(
-                'Cached bilder: ${htmlContent.contains('cached://') ? 'Ja' : 'Nei'}'),
-            Text(
-                'File bilder: ${htmlContent.contains('file://') ? 'Ja' : 'Nei'}'),
-            Text('HTTP bilder: ${htmlContent.contains('http') ? 'Ja' : 'Nei'}'),
-            Text(
-                'Totalt <img> tags: ${RegExp(r'<img[^>]*>', caseSensitive: false).allMatches(htmlContent).length}'),
-            const SizedBox(height: 8),
-            ElevatedButton.icon(
-              onPressed: () => _forceUpdateImageLinks(),
-              icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('Oppdater bildelenker',
-                  style: TextStyle(fontSize: 10)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              ),
-            ),
-          ],
-        ),
-      );
-
       final contentWidgets =
           _buildContentSegmentWithImages(htmlContent, context);
 
-      return [debugInfo, ...contentWidgets];
+      return contentWidgets;
     }
 
     // No images, just return HTML content
