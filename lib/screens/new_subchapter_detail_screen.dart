@@ -45,14 +45,8 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
         _updatedContent = updatedSubchapter?.text ?? widget.subchapter.text;
         _isLoading = false;
       });
-
-      // Debug: Check content for images
-      _debugContentImages();
-
-      // Debug: Check if JSON file has been updated with file:// references
-      _debugJsonFile();
     } catch (e) {
-      print('❌ Error loading updated content: $e');
+      // Error loading updated content
       setState(() {
         _updatedContent = widget.subchapter.text;
         _isLoading = false;
@@ -72,7 +66,7 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
           if (chapter.title == widget.chapter.title) {
             for (final subchapter in chapter.subchapters) {
               if (subchapter.title == widget.subchapter.title) {
-                print('🔄 Found updated subchapter content with cached images');
+                // Found updated subchapter content with cached images
                 return subchapter;
               }
             }
@@ -80,35 +74,11 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
         }
       }
 
-      print('⚠️ No updated content found, using original');
+      // No updated content found, using original
       return null;
     } catch (e) {
-      print('❌ Error getting updated subchapter content: $e');
+      // Error getting updated subchapter content
       return null;
-    }
-  }
-
-  Future<void> _checkCachedImageExists(String cachedUrl, int index) async {
-    try {
-      // Extract index from cached URL
-      final parts = cachedUrl.split('_');
-      if (parts.length >= 4) {
-        final indexPart = parts.last.replaceAll('.img', '');
-        final imageIndex = int.tryParse(indexPart);
-
-        if (imageIndex != null) {
-          final cachedFile = await NewPublicationService.instance
-              .getCachedImageFile(widget.publication.id, imageIndex);
-          print('🔍 DEBUG: Cached image $index exists: ${cachedFile != null}');
-          if (cachedFile != null) {
-            final exists = await cachedFile.exists();
-            final size = exists ? await cachedFile.length() : 0;
-            print('🔍 DEBUG: File exists: $exists, Size: $size bytes');
-          }
-        }
-      }
-    } catch (e) {
-      print('❌ DEBUG: Error checking cached image: $e');
     }
   }
 
@@ -140,97 +110,6 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
       body: _buildBody(context),
       bottomNavigationBar: _buildFloatingNavigationBar(context),
     );
-  }
-
-  void _debugContentImages() {
-    final content = _updatedContent ?? widget.subchapter.text;
-    print(
-        '🔍 DEBUG: Subchapter "${widget.subchapter.title}" content analysis:');
-    print('🔍 DEBUG: Content length: ${content.length}');
-    print('🔍 DEBUG: Contains cached:// ? ${content.contains('cached://')}');
-    print('🔍 DEBUG: Contains file:// ? ${content.contains('file://')}');
-    print('🔍 DEBUG: Contains <img ? ${content.contains('<img')}');
-
-    // Check for various image patterns
-    final imgMatches =
-        RegExp(r'<img[^>]*>', caseSensitive: false).allMatches(content);
-    print('🔍 DEBUG: Found ${imgMatches.length} <img> tags');
-
-    // Show first few image tags for debugging
-    for (int i = 0; i < imgMatches.length && i < 3; i++) {
-      final match = imgMatches.elementAt(i);
-      final imgTag = match.group(0);
-      print('🔍 DEBUG: Image tag $i: $imgTag');
-
-      // Extract src attribute
-      final srcMatch =
-          RegExp(r'src=(["\047])([^"\047]+)\1', caseSensitive: false)
-              .firstMatch(imgTag ?? '');
-      if (srcMatch != null) {
-        final src = srcMatch.group(2);
-        print('🔍 DEBUG: Image src $i: "$src"');
-
-        if (src != null && src.startsWith('cached://')) {
-          // Check if cached file exists
-          _checkCachedImageExists(src, i);
-        }
-      }
-    }
-
-    // Check for cached references
-    final cachedMatches =
-        RegExp(r'cached://[^\s">]+', caseSensitive: false).allMatches(content);
-    print('🔍 DEBUG: Found ${cachedMatches.length} cached:// references');
-
-    for (int i = 0; i < cachedMatches.length && i < 3; i++) {
-      final match = cachedMatches.elementAt(i);
-      final cachedRef = match.group(0);
-      print('🔍 DEBUG: Cached ref $i: $cachedRef');
-    }
-  }
-
-  // Debug method to check JSON file content
-  Future<void> _debugJsonFile() async {
-    try {
-      final chapters = await NewPublicationService.instance
-          .loadPublicationContent(widget.publication.id);
-      if (chapters != null) {
-        print('🔍 DEBUG: Checking JSON file for file:// references...');
-        int fileRefCount = 0;
-        for (final chapter in chapters) {
-          for (final subchapter in chapter.subchapters) {
-            if (subchapter.text.contains('file://')) {
-              fileRefCount += 'file://'.allMatches(subchapter.text).length;
-            }
-          }
-        }
-        print(
-            '🔍 DEBUG: Found $fileRefCount file:// references in JSON content');
-
-        if (fileRefCount > 0) {
-          // Find first file:// reference as example
-          for (final chapter in chapters) {
-            for (final subchapter in chapter.subchapters) {
-              final firstFileMatch = subchapter.text.indexOf('file://');
-              if (firstFileMatch != -1) {
-                final start =
-                    (firstFileMatch - 30).clamp(0, subchapter.text.length);
-                final end =
-                    (firstFileMatch + 80).clamp(0, subchapter.text.length);
-                final sample = subchapter.text.substring(start, end);
-                print('🔍 DEBUG: Sample file:// reference: ...$sample...');
-                return; // Show only first example
-              }
-            }
-          }
-        }
-      } else {
-        print(
-            '❌ DEBUG: No JSON content found for publication ${widget.publication.id}');
-      }
-    } catch (e) {
-      print('❌ DEBUG: Error checking JSON file: $e');
-    }
   }
 
   Widget _buildBody(BuildContext context) {
@@ -788,21 +667,56 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
     );
   }
 
+  bool _hasPreviousChapter() {
+    // This method is called synchronously, so we can't load chapters here
+    // We'll handle the logic in _navigateToPrevious instead
+    // For now, always return true to enable the button
+    // The actual check will happen in _navigateToPrevious
+    return true;
+  }
+
+  bool _hasNextChapter() {
+    // This method is called synchronously, so we can't load chapters here
+    // We'll handle the logic in _navigateToNext instead
+    // For now, always return true to enable the button
+    // The actual check will happen in _navigateToNext
+    return true;
+  }
+
+  Future<int> _getChapterNumber() async {
+    try {
+      final chapters = await NewPublicationService.instance
+          .loadPublicationContent(widget.publication.id);
+
+      if (chapters != null) {
+        for (int i = 0; i < chapters.length; i++) {
+          if (chapters[i].title == widget.chapter.title) {
+            return i + 1; // Return 1-based chapter number
+          }
+        }
+      }
+    } catch (e) {
+      // Error getting chapter number
+    }
+    return 1; // Default fallback
+  }
+
   Widget _buildFloatingNavigationBar(BuildContext context) {
     // Only show navigation if we have the required data
     if (widget.allSubchapters == null || widget.currentIndex == null) {
       return const SizedBox.shrink();
     }
 
-    final hasPrevious = widget.currentIndex! > 0;
-    final hasNext = widget.currentIndex! < widget.allSubchapters!.length - 1;
+    final hasPrevious = widget.currentIndex! > 0 || _hasPreviousChapter();
+    final hasNext = widget.currentIndex! < widget.allSubchapters!.length - 1 ||
+        _hasNextChapter();
 
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1 * 255),
             blurRadius: 8,
             offset: const Offset(0, -2),
           ),
@@ -828,24 +742,34 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
               ),
 
               // Page indicator
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Theme.of(context).primaryColor.withOpacity(0.3),
-                  ),
-                ),
-                child: Text(
-                  '${widget.currentIndex! + 1} av ${widget.allSubchapters!.length}',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).primaryColor,
-                  ),
-                ),
+              FutureBuilder<int>(
+                future: _getChapterNumber(),
+                builder: (context, snapshot) {
+                  final chapterNumber = snapshot.data ?? 1;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .primaryColor
+                          .withValues(alpha: 0.1 * 255),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Theme.of(context)
+                            .primaryColor
+                            .withValues(alpha: 0.3 * 255),
+                      ),
+                    ),
+                    child: Text(
+                      'Kap. $chapterNumber, Avsn. ${widget.currentIndex! + 1}/${widget.allSubchapters!.length}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                    ),
+                  );
+                },
               ),
 
               // Next button
@@ -865,42 +789,192 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
     );
   }
 
-  void _navigateToPrevious(BuildContext context) {
-    if (widget.allSubchapters != null &&
-        widget.currentIndex != null &&
-        widget.currentIndex! > 0) {
-      final previousSubchapter =
-          widget.allSubchapters![widget.currentIndex! - 1];
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => NewSubchapterDetailScreen(
-            publication: widget.publication,
-            chapter: widget.chapter,
-            subchapter: previousSubchapter,
-            allSubchapters: widget.allSubchapters,
-            currentIndex: widget.currentIndex! - 1,
+  void _navigateToPrevious(BuildContext context) async {
+    if (widget.allSubchapters != null && widget.currentIndex != null) {
+      // Check if there's a previous subchapter in current chapter
+      if (widget.currentIndex! > 0) {
+        final previousSubchapter =
+            widget.allSubchapters![widget.currentIndex! - 1];
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => NewSubchapterDetailScreen(
+              publication: widget.publication,
+              chapter: widget.chapter,
+              subchapter: previousSubchapter,
+              allSubchapters: widget.allSubchapters,
+              currentIndex: widget.currentIndex! - 1,
+            ),
           ),
+        );
+      } else {
+        // First subchapter in current chapter - try to go to previous chapter
+        await _navigateToPreviousChapter(context);
+      }
+    }
+  }
+
+  Future<void> _navigateToPreviousChapter(BuildContext context) async {
+    try {
+      // Load all chapters to find the previous chapter
+      final chapters = await NewPublicationService.instance
+          .loadPublicationContent(widget.publication.id);
+
+      if (chapters != null) {
+        // Find current chapter index
+        int currentChapterIndex = -1;
+        for (int i = 0; i < chapters.length; i++) {
+          if (chapters[i].title == widget.chapter.title) {
+            currentChapterIndex = i;
+            break;
+          }
+        }
+
+        // Check if there's a previous chapter
+        if (currentChapterIndex > 0) {
+          final previousChapter = chapters[currentChapterIndex - 1];
+
+          // Get the last subchapter of the previous chapter
+          if (previousChapter.subchapters.isNotEmpty) {
+            final lastSubchapter = previousChapter.subchapters.last;
+            final lastIndex = previousChapter.subchapters.length - 1;
+
+            Navigator.pushReplacement(
+              context, // ignore: use_build_context_synchronously
+              MaterialPageRoute(
+                builder: (context) => NewSubchapterDetailScreen(
+                  publication: widget.publication,
+                  chapter: previousChapter,
+                  subchapter: lastSubchapter,
+                  allSubchapters: previousChapter.subchapters,
+                  currentIndex: lastIndex,
+                ),
+              ),
+            );
+          } else {
+            // Previous chapter has no subchapters
+            ScaffoldMessenger.of(context).showSnackBar(
+              // ignore: use_build_context_synchronously
+              const SnackBar(
+                content: Text('Forrige kapittel har ingen avsnitt'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        } else {
+          // No more chapters
+          ScaffoldMessenger.of(context).showSnackBar(
+            // ignore: use_build_context_synchronously
+            const SnackBar(
+              content: Text('Du er på første kapittel'),
+              backgroundColor: Colors.blue,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // Error navigating to previous chapter
+      // Show error message to user
+      ScaffoldMessenger.of(context).showSnackBar(
+        // ignore: use_build_context_synchronously
+        const SnackBar(
+          content: Text('Kunne ikke navigere til forrige kapittel'),
+          backgroundColor: Colors.red,
         ),
       );
     }
   }
 
-  void _navigateToNext(BuildContext context) {
-    if (widget.allSubchapters != null &&
-        widget.currentIndex != null &&
-        widget.currentIndex! < widget.allSubchapters!.length - 1) {
-      final nextSubchapter = widget.allSubchapters![widget.currentIndex! + 1];
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => NewSubchapterDetailScreen(
-            publication: widget.publication,
-            chapter: widget.chapter,
-            subchapter: nextSubchapter,
-            allSubchapters: widget.allSubchapters,
-            currentIndex: widget.currentIndex! + 1,
+  void _navigateToNext(BuildContext context) async {
+    if (widget.allSubchapters != null && widget.currentIndex != null) {
+      // Check if there's a next subchapter in current chapter
+      if (widget.currentIndex! < widget.allSubchapters!.length - 1) {
+        final nextSubchapter = widget.allSubchapters![widget.currentIndex! + 1];
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => NewSubchapterDetailScreen(
+              publication: widget.publication,
+              chapter: widget.chapter,
+              subchapter: nextSubchapter,
+              allSubchapters: widget.allSubchapters,
+              currentIndex: widget.currentIndex! + 1,
+            ),
           ),
+        );
+      } else {
+        // Last subchapter in current chapter - try to go to next chapter
+        await _navigateToNextChapter(context);
+      }
+    }
+  }
+
+  Future<void> _navigateToNextChapter(BuildContext context) async {
+    try {
+      // Load all chapters to find the next chapter
+      final chapters = await NewPublicationService.instance
+          .loadPublicationContent(widget.publication.id);
+
+      if (chapters != null) {
+        // Find current chapter index
+        int currentChapterIndex = -1;
+        for (int i = 0; i < chapters.length; i++) {
+          if (chapters[i].title == widget.chapter.title) {
+            currentChapterIndex = i;
+            break;
+          }
+        }
+
+        // Check if there's a next chapter
+        if (currentChapterIndex >= 0 &&
+            currentChapterIndex < chapters.length - 1) {
+          final nextChapter = chapters[currentChapterIndex + 1];
+
+          // Get the first subchapter of the next chapter
+          if (nextChapter.subchapters.isNotEmpty) {
+            final firstSubchapter = nextChapter.subchapters[0];
+
+            Navigator.pushReplacement(
+              context, // ignore: use_build_context_synchronously
+              MaterialPageRoute(
+                builder: (context) => NewSubchapterDetailScreen(
+                  publication: widget.publication,
+                  chapter: nextChapter,
+                  subchapter: firstSubchapter,
+                  allSubchapters: nextChapter.subchapters,
+                  currentIndex: 0,
+                ),
+              ),
+            );
+          } else {
+            // Next chapter has no subchapters
+            ScaffoldMessenger.of(context).showSnackBar(
+              // ignore: use_build_context_synchronously
+              const SnackBar(
+                content: Text('Neste kapittel har ingen avsnitt'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        } else {
+          // No more chapters
+          ScaffoldMessenger.of(context).showSnackBar(
+            // ignore: use_build_context_synchronously
+            const SnackBar(
+              content: Text('Du er på siste kapittel'),
+              backgroundColor: Colors.blue,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // Error navigating to next chapter
+      // Show error message to user
+      ScaffoldMessenger.of(context).showSnackBar(
+        // ignore: use_build_context_synchronously
+        const SnackBar(
+          content: Text('Kunne ikke navigere til neste kapittel'),
+          backgroundColor: Colors.red,
         ),
       );
     }
