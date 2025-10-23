@@ -90,6 +90,7 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
           title: Text(widget.subchapter.title),
           backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         ),
+        backgroundColor: Colors.white,
         body: const Center(
           child: CircularProgressIndicator(),
         ),
@@ -107,6 +108,7 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
           ),
         ],
       ),
+      backgroundColor: Colors.white,
       body: _buildBody(context),
       bottomNavigationBar: _buildFloatingNavigationBar(context),
     );
@@ -119,46 +121,12 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Breadcrumb navigation
-          _buildBreadcrumb(context),
-          const SizedBox(height: 16),
-
           // Subchapter header
           _buildHeader(),
           const SizedBox(height: 24),
 
           // Content
           _buildContent(context),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBreadcrumb(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.library_books,
-            size: 16,
-            color: Colors.grey[600],
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              '${widget.publication.name} › ${widget.chapter.title} › ${widget.subchapter.title}',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
         ],
       ),
     );
@@ -199,17 +167,8 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
   }
 
   Widget _buildContent(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: _buildContentWithTables(
-          _updatedContent ?? widget.subchapter.text, context),
-    );
+    return _buildContentWithTables(
+        _updatedContent ?? widget.subchapter.text, context);
   }
 
   // Build content with custom table parsing
@@ -614,7 +573,6 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
       ),
       'p': Style(
         margin: Margins.only(bottom: 12),
-        textAlign: TextAlign.justify,
       ),
       'ul': Style(
         margin: Margins.only(bottom: 12),
@@ -683,24 +641,6 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
     return true;
   }
 
-  Future<int> _getChapterNumber() async {
-    try {
-      final chapters = await NewPublicationService.instance
-          .loadPublicationContent(widget.publication.id);
-
-      if (chapters != null) {
-        for (int i = 0; i < chapters.length; i++) {
-          if (chapters[i].title == widget.chapter.title) {
-            return i + 1; // Return 1-based chapter number
-          }
-        }
-      }
-    } catch (e) {
-      // Error getting chapter number
-    }
-    return 1; // Default fallback
-  }
-
   Widget _buildFloatingNavigationBar(BuildContext context) {
     // Only show navigation if we have the required data
     if (widget.allSubchapters == null || widget.currentIndex == null) {
@@ -742,34 +682,13 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
               ),
 
               // Page indicator
-              FutureBuilder<int>(
-                future: _getChapterNumber(),
-                builder: (context, snapshot) {
-                  final chapterNumber = snapshot.data ?? 1;
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .primaryColor
-                          .withValues(alpha: 0.1 * 255),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: Theme.of(context)
-                            .primaryColor
-                            .withValues(alpha: 0.3 * 255),
-                      ),
-                    ),
-                    child: Text(
-                      'Kap. $chapterNumber, Avsn. ${widget.currentIndex! + 1}/${widget.allSubchapters!.length}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).primaryColor,
-                      ),
-                    ),
-                  );
-                },
+              Text(
+                '${widget.currentIndex! + 1} av ${widget.allSubchapters!.length}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
               ),
 
               // Next button
