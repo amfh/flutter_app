@@ -220,16 +220,16 @@ class _NewPublicationListScreenState extends State<NewPublicationListScreen> {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (publication.title != null && publication.title!.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                publication.title!,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
+            // if (publication.title != null && publication.title!.isNotEmpty) ...[
+            //   const SizedBox(height: 4),
+            //   Text(
+            //     publication.title!,
+            //     style: TextStyle(
+            //       fontSize: 14,
+            //       color: Colors.grey[600],
+            //     ),
+            //   ),
+            // ],
             const SizedBox(height: 8),
             Row(
               children: [
