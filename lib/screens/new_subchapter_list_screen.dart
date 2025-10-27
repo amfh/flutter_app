@@ -17,7 +17,8 @@ class NewSubchapterListScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(chapter.title),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        backgroundColor: Theme.of(context).primaryColor,
+        foregroundColor: Colors.white,
       ),
       body: _buildBody(context),
     );

@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import '../main.dart';
-import '../services/new_user_data_service.dart';
 import '../screens/new_publication_list_screen.dart';
 import '../screens/new_my_page_screen.dart';
 import '../screens/new_about_screen.dart';
@@ -27,7 +25,8 @@ class _NewMainScaffoldState extends State<NewMainScaffold> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        backgroundColor: Theme.of(context).primaryColor,
+        foregroundColor: Colors.white,
         elevation: 2,
       ),
       drawer: _buildDrawer(context),
@@ -46,6 +45,7 @@ class _NewMainScaffoldState extends State<NewMainScaffold> {
             decoration: BoxDecoration(
               color: Theme.of(context).primaryColor,
             ),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
             child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
@@ -53,14 +53,14 @@ class _NewMainScaffoldState extends State<NewMainScaffold> {
                 Icon(
                   Icons.library_books,
                   color: Colors.white,
-                  size: 48,
+                  size: 36,
                 ),
-                SizedBox(height: 8),
+                SizedBox(height: 6),
                 Text(
                   'Kompetansebiblioteket',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 24,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -68,7 +68,7 @@ class _NewMainScaffoldState extends State<NewMainScaffold> {
                   'VVS Publikasjoner',
                   style: TextStyle(
                     color: Colors.white70,
-                    fontSize: 16,
+                    fontSize: 13,
                   ),
                 ),
               ],
@@ -94,14 +94,6 @@ class _NewMainScaffoldState extends State<NewMainScaffold> {
             title: 'Om appen',
             route: '/about',
             onTap: () => _navigateToAbout(context),
-          ),
-          const Divider(),
-          _buildDrawerItem(
-            context,
-            icon: Icons.logout,
-            title: 'Logg ut',
-            route: '/logout',
-            onTap: () => _logout(context),
           ),
         ],
       ),
@@ -167,67 +159,6 @@ class _NewMainScaffoldState extends State<NewMainScaffold> {
           builder: (context) => const NewAboutScreen(),
         ),
       );
-    }
-  }
-
-  void _logout(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Logg ut'),
-          content: const Text('Er du sikker på at du vil logge ut?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Avbryt'),
-            ),
-            TextButton(
-              onPressed: () async {
-                Navigator.pop(context); // Close dialog
-                await _performLogout(context);
-              },
-              child: const Text('Logg ut'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _performLogout(BuildContext context) async {
-    try {
-      // Clear user session
-      await UserSession.instance.clearSession();
-
-      // Delete local user data (but keep downloaded publications for offline use)
-      await UserDataService.instance.deleteUserData();
-
-      // NOTE: We do NOT clear downloaded content to preserve offline publications
-      // If you want to clear content on logout, uncomment the line below:
-      // await NewPublicationService.instance.clearAllContent();
-
-      if (context.mounted) {
-        // Navigate back to login screen
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const AuthWrapper(),
-          ),
-          (route) => false,
-        );
-      }
-    } catch (e) {
-      print('❌ Error during logout: $e');
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Feil under utlogging. Prøv igjen.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
     }
   }
 }

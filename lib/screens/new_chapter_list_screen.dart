@@ -69,7 +69,8 @@ class _NewChapterListScreenState extends State<NewChapterListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.publication.name),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        backgroundColor: Theme.of(context).primaryColor,
+        foregroundColor: Colors.white,
       ),
       body: _buildBody(),
     );

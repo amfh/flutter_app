@@ -193,16 +193,12 @@ class _NewAppWrapperState extends State<NewAppWrapper> {
         builder: (BuildContext dialogContext) => AlertDialog(
           title: const Text('Sjekk for oppdateringer'),
           content: const Text(
-            'Det ser ut som du har internett-tilgang. Vil du sjekke om det finnes nye versjoner av publikasjonene dine?',
+            'For å sjekke om det finnes nye versjoner av publikasjonene dine, kan du trykke på Oppdater på Publikasjoner sida!',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Nei takk'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Ja, sjekk'),
+              child: const Text('Ok'),
             ),
           ],
         ),
@@ -246,7 +242,8 @@ class _NewAppWrapperState extends State<NewAppWrapper> {
       title: 'Kompetansebiblioteket',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2196f3),
+          seedColor: const Color(0xFF0974ba),
+          primary: const Color(0xFF0974ba),
         ),
         useMaterial3: true,
       ),
@@ -259,7 +256,8 @@ class _NewAppWrapperState extends State<NewAppWrapper> {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Laster...'),
-          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          backgroundColor: Theme.of(context).primaryColor,
+          foregroundColor: Colors.white,
         ),
         body: const Center(
           child: Column(

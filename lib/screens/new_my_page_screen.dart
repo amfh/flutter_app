@@ -1,11 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
+import '../main.dart';
 import '../widgets/new_main_scaffold.dart';
 import '../services/new_user_data_service.dart';
 import '../services/new_publication_service.dart';
 import '../models/user_data.dart';
-import '../models/new_publication.dart';
 
 class NewMyPageScreen extends StatefulWidget {
   const NewMyPageScreen({super.key});
@@ -20,34 +18,13 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
       NewPublicationService.instance;
 
   UserData? _userData;
-  Map<String, bool> _downloadStatus = {};
   bool _isLoading = true;
-  bool _isOnline = false;
-  bool _isRefreshing = false;
   String? _errorMessage;
-
-  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
-    _setupConnectivityListener();
     _loadData();
-  }
-
-  void _setupConnectivityListener() {
-    _connectivitySubscription = Connectivity()
-        .onConnectivityChanged
-        .listen((List<ConnectivityResult> results) {
-      final isConnected = results.isNotEmpty &&
-          !results.every((result) => result == ConnectivityResult.none);
-      if (mounted && isConnected != _isOnline) {
-        setState(() {
-          _isOnline = isConnected;
-        });
-        print('📶 Connectivity changed: ${isConnected ? 'Online' : 'Offline'}');
-      }
-    });
   }
 
   Future<void> _loadData() async {
@@ -70,15 +47,6 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
 
       setState(() {
         _userData = userData;
-      });
-
-      // Check internet connection
-      await _checkConnectivity();
-
-      // Load download status for publications
-      await _loadDownloadStatus();
-
-      setState(() {
         _isLoading = false;
       });
     } catch (e) {
@@ -87,173 +55,6 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
         _errorMessage = 'Feil ved lasting av data: $e';
         _isLoading = false;
       });
-    }
-  }
-
-  Future<void> _checkConnectivity() async {
-    try {
-      final connectivityResults = await Connectivity().checkConnectivity();
-      final isConnected = connectivityResults.isNotEmpty &&
-          !connectivityResults
-              .every((result) => result == ConnectivityResult.none);
-
-      if (mounted) {
-        setState(() {
-          _isOnline = isConnected;
-        });
-      }
-
-      print(
-          '📶 Initial connectivity check: ${isConnected ? 'Online' : 'Offline'}');
-
-      // Don't automatically fetch publications - only when user clicks refresh
-    } catch (e) {
-      print('❌ Error checking connectivity: $e');
-      if (mounted) {
-        setState(() {
-          _isOnline = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _fetchLatestPublications() async {
-    try {
-      final apiPublications = await _publicationService.fetchPublications();
-
-      // Update user data with new version dates from API
-      if (_userData != null) {
-        final updatedPublications = <Publication>[];
-
-        for (final userPub in _userData!.availablePublications) {
-          // Find corresponding API publication
-          final apiPub = apiPublications.firstWhere(
-            (p) => p.id == userPub.id,
-            orElse: () => userPub,
-          );
-
-          // Create updated publication with new version date from API
-          final updatedPub = Publication(
-            id: userPub.id,
-            name: userPub.name,
-            title: userPub.title,
-            imageUrl: userPub.imageUrl,
-            url: userPub.url,
-            createDate: userPub.createDate,
-            updateDate: userPub.updateDate, // Keep original version date
-            newVersionDate: apiPub.updateDate, // Set new version date from API
-            restrictPublicAccessIds: userPub.restrictPublicAccessIds,
-            dataSizeInBytes: userPub.dataSizeInBytes,
-            dataSize: userPub.dataSize,
-            chapterCount: userPub.chapterCount,
-            subchapterCount: userPub.subchapterCount,
-          );
-
-          updatedPublications.add(updatedPub);
-        }
-
-        // Update user data with publications containing new version dates
-        final updatedUserData = UserData(
-          email: _userData!.email,
-          lastUpdated: DateTime.now(),
-          availablePublications: updatedPublications,
-          subscriptions: _userData!.subscriptions,
-        );
-
-        await _userDataService.saveUserData(updatedUserData);
-
-        setState(() {
-          _userData = updatedUserData;
-        });
-      }
-    } catch (e) {
-      print('❌ Error fetching publications: $e');
-      // Don't show error to user if we can't fetch - offline mode should still work
-    }
-  }
-
-  Future<void> _loadDownloadStatus() async {
-    try {
-      if (_userData == null) return;
-
-      print('🔄 Loading download status...');
-      final downloadedIds =
-          await _publicationService.getDownloadedPublicationIds();
-      final status = <String, bool>{};
-
-      for (final publication in _userData!.availablePublications) {
-        status[publication.id] = downloadedIds.contains(publication.id);
-      }
-
-      if (mounted) {
-        setState(() {
-          _downloadStatus = status;
-        });
-      }
-      print('✅ Download status loaded successfully');
-    } catch (e) {
-      print('❌ Error loading download status: $e');
-      // Don't rethrow - let the app continue with current status
-    }
-  }
-
-  // Update publication's updateDate after successful download
-  Future<void> _updatePublicationAfterDownload(String publicationId) async {
-    try {
-      if (_userData == null) return;
-
-      print(
-          '📝 Updating publication updateDate after download: $publicationId');
-
-      // Fetch latest publication data from API to get current updateDate
-      final apiPublications = await _publicationService.fetchPublications();
-      final apiPub = apiPublications.firstWhere(
-        (p) => p.id == publicationId,
-        orElse: () => throw Exception('Publication not found in API'),
-      );
-
-      // Update the specific publication in user data
-      final updatedPublications = _userData!.availablePublications.map((pub) {
-        if (pub.id == publicationId) {
-          return Publication(
-            id: pub.id,
-            name: pub.name,
-            title: pub.title,
-            imageUrl: pub.imageUrl,
-            url: pub.url,
-            createDate: pub.createDate,
-            updateDate: apiPub.updateDate, // Update with latest from API
-            newVersionDate: pub.newVersionDate, // Keep existing newVersionDate
-            restrictPublicAccessIds: pub.restrictPublicAccessIds,
-            dataSizeInBytes: pub.dataSizeInBytes,
-            dataSize: pub.dataSize,
-            chapterCount: pub.chapterCount,
-            subchapterCount: pub.subchapterCount,
-          );
-        }
-        return pub;
-      }).toList();
-
-      // Save updated user data
-      final updatedUserData = UserData(
-        email: _userData!.email,
-        lastUpdated: DateTime.now(),
-        availablePublications: updatedPublications,
-        subscriptions: _userData!.subscriptions,
-      );
-
-      await _userDataService.saveUserData(updatedUserData);
-
-      if (mounted) {
-        setState(() {
-          _userData = updatedUserData;
-        });
-      }
-
-      print('✅ Publication updateDate updated successfully');
-    } catch (e) {
-      print('❌ Error updating publication after download: $e');
-      // Don't show error to user - the download was still successful
     }
   }
 
@@ -340,23 +141,17 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
     }
 
     try {
-      return RefreshIndicator(
-        onRefresh: _refreshData,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildUserInfoCard(),
-              const SizedBox(height: 16),
-              _buildSubscriptionsCard(),
-              const SizedBox(height: 16),
-              _buildPublicationsCard(),
-              const SizedBox(height: 16),
-              _buildConnectionStatusCard(),
-            ],
-          ),
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildUserInfoCard(),
+            const SizedBox(height: 16),
+            _buildSubscriptionsCard(),
+            const SizedBox(height: 16),
+            _buildLogoutCard(),
+          ],
         ),
       );
     } catch (e) {
@@ -421,63 +216,11 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
             Row(
               children: [
                 const Text(
-                  'Sist oppdatert: ',
+                  'Sist pålogging: ',
                   style: TextStyle(fontWeight: FontWeight.w500),
                 ),
                 Text(_formatDate(_userData?.lastUpdated)),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildConnectionStatusCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  _isOnline ? Icons.wifi : Icons.wifi_off,
-                  color: _isOnline ? Colors.green : Colors.orange,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _isOnline ? 'Online' : 'Offline',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: _isOnline ? Colors.green : Colors.orange,
-                  ),
-                ),
-                const Spacer(),
-                if (_isOnline && !_isRefreshing)
-                  TextButton.icon(
-                    onPressed: _refreshData,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Oppdater'),
-                  )
-                else if (_isRefreshing)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'For å sjekke om det er nye versjoner av publikasjoner, trykk på Oppdater. Deretter se om det kommer opp Oppdater knapp ved publikasjon på denne sida',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-                fontStyle: FontStyle.italic,
-              ),
             ),
           ],
         ),
@@ -653,22 +396,22 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
     );
   }
 
-  Widget _buildPublicationsCard() {
+  Widget _buildLogoutCard() {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
                 Icon(
-                  Icons.library_books,
+                  Icons.logout,
                   color: Theme.of(context).primaryColor,
                 ),
                 const SizedBox(width: 8),
                 const Text(
-                  'Tilgjengelige publikasjoner',
+                  'Logg ut',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -677,335 +420,88 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
               ],
             ),
             const Divider(),
-            if (_userData?.availablePublications.isEmpty ?? true) ...[
-              const Text('Ingen publikasjoner tilgjengelig'),
-            ] else ...[
-              ..._userData!.availablePublications
-                  .map((pub) => _buildPublicationItem(pub)),
-            ],
+            const Text(
+              'Mangler du abonnement eller har fått nytt abonnement? Logg ut og inn igjen på appen.',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _logout,
+              icon: const Icon(Icons.logout),
+              label: const Text('Logg ut'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildPublicationItem(Publication publication) {
-    final isDownloaded = _downloadStatus[publication.id] ?? false;
-    final hasUpdate = _hasUpdate(publication);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  publication.name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-              if (hasUpdate)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.orange,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text(
-                    'Oppdatering',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(
-                isDownloaded ? Icons.check_circle : Icons.download,
-                size: 16,
-                color: isDownloaded ? Colors.green : Colors.grey,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                isDownloaded ? 'Lastet ned' : 'Ikke lastet ned',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDownloaded ? Colors.green : Colors.grey,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                'Versjonsdato: ${_formatDate(publication.updateDate)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
-          ),
-          if (_isOnline && (!isDownloaded || hasUpdate)) ...[
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => _downloadPublication(publication),
-                icon: Icon(hasUpdate ? Icons.update : Icons.download),
-                label: Text(hasUpdate ? 'Oppdater' : 'Last ned'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: hasUpdate ? Colors.orange : null,
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  bool _hasUpdate(Publication publication) {
-    // Check if there's a newer version available
-    if (publication.newVersionDate == null) return false;
-
-    return publication.newVersionDate!.isAfter(publication.updateDate);
-  }
-
-  Future<void> _downloadPublication(Publication publication) async {
-    bool cancelled = false;
-    double progress = 0.0;
-    String statusText = 'Forbereder nedlasting...';
-    late StateSetter dialogSetState;
-
-    // Track if dialog was closed early
-    bool dialogClosed = false;
-
-    // Simple approach: Use a popup and track context properly
-    void closeDialog() {
-      dialogClosed = true;
-      if (mounted) {
-        try {
-          // Check if we can actually pop before trying
-          final navigator = Navigator.of(context, rootNavigator: true);
-          if (navigator.canPop()) {
-            navigator.pop();
-          }
-        } catch (e) {
-          print('⚠️ Error closing dialog: $e');
-          // Try alternative approach
-          try {
-            Navigator.of(context).pop();
-          } catch (e2) {
-            print('⚠️ Alternative dialog close also failed: $e2');
-          }
-        }
-      }
-    }
-
-    // Show the dialog with progress
+  void _logout() {
     showDialog(
       context: context,
-      barrierDismissible: false,
-      useRootNavigator: true,
-      builder: (BuildContext dialogContext) => StatefulBuilder(
-        builder: (context, setState) {
-          dialogSetState = setState; // Store the setState function
-          return AlertDialog(
-            title: const Text('Laster ned publikasjon'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(value: progress),
-                const SizedBox(height: 16),
-                Text('${(progress * 100).toInt()}%',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Text(statusText),
-                const SizedBox(height: 8),
-                Text(
-                  publication.name,
-                  style: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w500),
-                  textAlign: TextAlign.center,
-                ),
-                if (publication.dataSizeInBytes != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Størrelse: ${_formatDataSize(publication.dataSizeInBytes!)}',
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
-                  ),
-                ],
-              ],
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Logg ut'),
+          content: const Text('Er du sikker på at du vil logge ut?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Avbryt'),
             ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  print('🚫 Bruker trykket avbryt - stopper nedlasting');
-                  cancelled = true;
-                  dialogClosed = true;
-                  try {
-                    if (Navigator.of(dialogContext).canPop()) {
-                      Navigator.of(dialogContext).pop();
-                    }
-                  } catch (e) {
-                    print('⚠️ Error closing dialog from cancel button: $e');
-                    // Try alternative approach
-                    try {
-                      Navigator.of(context).pop();
-                    } catch (e2) {
-                      print('⚠️ Alternative cancel close failed: $e2');
-                    }
-                  }
-                },
-                child: const Text('Avbryt'),
-              ),
-            ],
-          );
-        },
-      ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(context); // Close dialog
+                await _performLogout();
+              },
+              child: const Text('Logg ut'),
+            ),
+          ],
+        );
+      },
     );
-
-    // Note: Removed automatic timer close - let download complete naturally
-
-    try {
-      // Short delay to let dialog render before starting
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      // Check if already cancelled
-      if (cancelled || dialogClosed) {
-        print('🚫 Nedlasting avbrutt før start');
-        return;
-      }
-
-      // Download with progress tracking
-      await _publicationService.downloadPublicationContentWithProgress(
-        publication.id,
-        expectedSizeInBytes: publication.dataSizeInBytes,
-        isCancelled: () => cancelled || dialogClosed,
-        onProgress: (double newProgress, String status) {
-          if (!cancelled && !dialogClosed && mounted) {
-            try {
-              dialogSetState(() {
-                progress = newProgress;
-                statusText = status;
-              });
-              print('📊 Progress: ${(newProgress * 100).toInt()}% - $status');
-            } catch (e) {
-              print('⚠️ Error updating progress: $e');
-            }
-          } else if (cancelled || dialogClosed) {
-            print('🚫 Progress oppdatering stoppet - nedlasting avbrutt');
-          }
-        },
-      );
-
-      if (cancelled || dialogClosed || !mounted) {
-        print('🚫 Nedlasting fullført men avbrutt - ignorerer resultat');
-        return;
-      }
-
-      // Close dialog immediately
-      closeDialog();
-
-      // Wait a moment for dialog to close
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      // Show success message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ ${publication.name} er lastet ned med bilder'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-
-        // Background updates without awaiting
-        _updatePublicationAfterDownload(publication.id).catchError((e) {
-          print('❌ Background publication update failed: $e');
-        });
-
-        _loadDownloadStatus()
-            .catchError((e) => print('❌ Error updating download status: $e'));
-      }
-    } catch (e) {
-      if (cancelled || dialogClosed) {
-        print('🚫 Nedlasting avbrutt av bruker');
-        return;
-      }
-
-      if (!mounted) return;
-
-      closeDialog();
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      if (mounted) {
-        String errorMessage = 'Nedlasting feilet. Prøv igjen senere.';
-        if (e.toString().contains('timeout')) {
-          errorMessage =
-              'Nedlasting tok for lang tid. Sjekk internettforbindelsen.';
-        } else if (e.toString().contains('Connection') ||
-            e.toString().contains('Socket')) {
-          errorMessage =
-              'Kan ikke koble til server. Sjekk internettforbindelsen.';
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('❌ Feil ved nedlasting'),
-                const SizedBox(height: 4),
-                Text(errorMessage, style: const TextStyle(fontSize: 12)),
-              ],
-            ),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-            action: SnackBarAction(
-              label: 'Prøv igjen',
-              textColor: Colors.white,
-              onPressed: () => _downloadPublication(publication),
-            ),
-          ),
-        );
-      }
-    }
   }
 
-  Future<void> _refreshData() async {
-    setState(() {
-      _isRefreshing = true;
-    });
-
+  Future<void> _performLogout() async {
     try {
-      await _checkConnectivity();
+      // Clear user session
+      await UserSession.instance.clearSession();
 
-      // Only fetch publications when user manually refreshes
-      if (_isOnline) {
-        await _fetchLatestPublications();
+      // Delete local user data (but keep downloaded publications for offline use)
+      await _userDataService.deleteUserData();
+
+      // NOTE: We do NOT clear downloaded content to preserve offline publications
+      // If you want to clear content on logout, uncomment the line below:
+      // await _publicationService.clearAllContent();
+
+      if (mounted) {
+        // Navigate back to login screen
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const AuthWrapper(),
+          ),
+          (route) => false,
+        );
       }
+    } catch (e) {
+      print('❌ Error during logout: $e');
 
-      await _loadDownloadStatus();
-    } finally {
-      setState(() {
-        _isRefreshing = false;
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Feil under utlogging. Prøv igjen.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -1046,21 +542,8 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
     }
   }
 
-  String _formatDataSize(int sizeInBytes) {
-    if (sizeInBytes < 1024) {
-      return '$sizeInBytes B';
-    } else if (sizeInBytes < 1024 * 1024) {
-      return '${(sizeInBytes / 1024).toStringAsFixed(1)} KB';
-    } else if (sizeInBytes < 1024 * 1024 * 1024) {
-      return '${(sizeInBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    } else {
-      return '${(sizeInBytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-    }
-  }
-
   @override
   void dispose() {
-    _connectivitySubscription?.cancel();
     _publicationService.dispose();
     super.dispose();
   }

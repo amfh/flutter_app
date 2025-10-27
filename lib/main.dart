@@ -202,12 +202,12 @@ class LoadingApp extends StatelessWidget {
       title: 'Kompetansebiblioteket',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2196f3),
-          primary: const Color(0xFF2196f3),
+          seedColor: const Color(0xFF0974ba),
+          primary: const Color(0xFF0974ba),
         ),
       ),
       home: Scaffold(
-        backgroundColor: const Color(0xFF2196f3), // App theme color
+        backgroundColor: const Color(0xFF0974ba), // App theme color
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -253,8 +253,8 @@ class MyApp extends StatelessWidget {
       title: 'Kompetansebiblioteket',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2196f3),
-          primary: const Color(0xFF2196f3),
+          seedColor: const Color(0xFF0974ba),
+          primary: const Color(0xFF0974ba),
         ),
       ),
       home: const AuthWrapper(),
@@ -535,7 +535,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return MainScaffold(
-      title: 'Hjem',
+      title: 'Kompetansebiblioteket',
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -674,7 +674,8 @@ class _B2CLoginPageWrapperState extends State<B2CLoginPageWrapper> {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Logger inn'),
-          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          backgroundColor: Theme.of(context).primaryColor,
+          foregroundColor: Colors.white,
         ),
         body: const Center(
           child: Column(
@@ -693,7 +694,8 @@ class _B2CLoginPageWrapperState extends State<B2CLoginPageWrapper> {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Ingen internettforbindelse'),
-          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          backgroundColor: Theme.of(context).primaryColor,
+          foregroundColor: Colors.white,
         ),
         body: Center(
           child: Padding(

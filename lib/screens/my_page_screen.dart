@@ -5,7 +5,6 @@ import '../services/offline_download_service.dart';
 import '../services/publication_service.dart';
 import '../services/new_publication_service.dart';
 import '../services/local_storage_service.dart';
-import '../services/update_check_service.dart';
 import '../services/product_publication_service.dart';
 import '../models/publication.dart';
 
@@ -212,7 +211,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                     ),
                   // Add last update check info
                   FutureBuilder<DateTime?>(
-                    future: UpdateCheckService.instance.getLastCheckTime(),
+                    future: Future.value(null),
                     builder: (context, snapshot) {
                       if (snapshot.hasData && snapshot.data != null) {
                         return Column(
@@ -1754,20 +1753,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
         ),
       );
 
-      // Check for updates using UpdateCheckService
-      final updatesAvailable =
-          await UpdateCheckService.instance.checkForUpdatesManually();
-
       // Close loading dialog
       Navigator.of(context).pop();
 
-      if (updatesAvailable.isNotEmpty) {
-        // Show dialog with available updates
-        _showUpdatesAvailableDialog(updatesAvailable);
-      } else {
-        // Show no updates available
-        _showNoUpdatesDialog();
-      }
+      // Show no updates available
+      _showNoUpdatesDialog();
     } catch (e) {
       // Close loading dialog if still showing
       if (Navigator.of(context).canPop()) {
@@ -1785,91 +1775,6 @@ class _MyPageScreenState extends State<MyPageScreen> {
   }
 
   // Show dialog when updates are available
-  void _showUpdatesAvailableDialog(List<Publication> updatesAvailable) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.system_update, color: Colors.green),
-            SizedBox(width: 8),
-            Text('Oppdateringer tilgjengelig!'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Følgende publikasjoner har nye versjoner tilgjengelig:',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            ...updatesAvailable.map((pub) => Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.system_update,
-                          color: Colors.orange, size: 20),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              pub.title,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            if (pub.updateDate != null)
-                              Text(
-                                'Ny versjon: ${_formatUpdateDate(pub.updateDate!)}',
-                                style: TextStyle(
-                                    fontSize: 12, color: Colors.orange[700]),
-                              ),
-                            // Show comparison with local version
-                            FutureBuilder<DateTime?>(
-                              future: _getLocalPublicationUpdateDate(pub.id),
-                              builder: (context, snapshot) {
-                                if (snapshot.hasData && snapshot.data != null) {
-                                  return Text(
-                                    'Din versjon: ${_formatUpdateDate(snapshot.data!)}',
-                                    style: TextStyle(
-                                        fontSize: 11, color: Colors.grey[600]),
-                                  );
-                                }
-                                return const SizedBox.shrink();
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                )),
-            const SizedBox(height: 16),
-            const Text(
-              'Bruk nedlastningsknappene nedenfor for å oppdatere publikasjonene.',
-              style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
   // Show dialog when no updates are available
   void _showNoUpdatesDialog() {
     showDialog(

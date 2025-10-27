@@ -88,7 +88,8 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
       return Scaffold(
         appBar: AppBar(
           title: Text(widget.subchapter.title),
-          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          backgroundColor: Theme.of(context).primaryColor,
+          foregroundColor: Colors.white,
         ),
         backgroundColor: Colors.white,
         body: const Center(
@@ -100,7 +101,8 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.subchapter.title),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        backgroundColor: Theme.of(context).primaryColor,
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.share),

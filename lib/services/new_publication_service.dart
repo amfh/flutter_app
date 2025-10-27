@@ -191,12 +191,30 @@ class NewPublicationService {
       onProgress(0.0, 'Starter nedlasting...');
       await Future.delayed(const Duration(milliseconds: 200));
 
+      // Check for cancellation early
+      if (isCancelled?.call() == true) {
+        print('🛑 Download cancelled by user at start');
+        throw Exception('Download cancelled by user');
+      }
+
       onProgress(0.1, 'Kobler til server...');
       await Future.delayed(const Duration(milliseconds: 300));
+
+      // Check for cancellation
+      if (isCancelled?.call() == true) {
+        print('🛑 Download cancelled by user while connecting');
+        throw Exception('Download cancelled by user');
+      }
 
       onProgress(0.2, 'Henter publikasjonsdata...');
       final chapters = await fetchPublicationContent(publicationId);
       print('📖 Downloaded ${chapters.length} chapters');
+
+      // Check for cancellation after fetching
+      if (isCancelled?.call() == true) {
+        print('🛑 Download cancelled by user after fetching data');
+        throw Exception('Download cancelled by user');
+      }
 
       // Debug: Analyze content structure
       print('🔍 === ANALYZING DOWNLOADED CONTENT ===');
@@ -211,6 +229,12 @@ class NewPublicationService {
       onProgress(0.5, 'Lagrer innhold...');
       await Future.delayed(const Duration(milliseconds: 200));
 
+      // Check for cancellation before saving
+      if (isCancelled?.call() == true) {
+        print('🛑 Download cancelled by user before saving content');
+        throw Exception('Download cancelled by user');
+      }
+
       await savePublicationContent(publicationId, chapters);
 
       onProgress(0.6, '🖼️ Starter bildnedlasting...');
@@ -219,6 +243,9 @@ class NewPublicationService {
 
       // Check for cancellation before starting image download
       if (isCancelled?.call() == true) {
+        print('🛑 Download cancelled by user before image download');
+        // Delete saved content before throwing exception
+        await _cleanupPartialDownload(publicationId);
         throw Exception('Download cancelled by user');
       }
 
@@ -243,7 +270,50 @@ class NewPublicationService {
       return chapters;
     } catch (e) {
       print('❌ Error downloading publication content with progress: $e');
+      // Clean up any partially downloaded data
+      if (e.toString().contains('cancelled by user')) {
+        print('🧹 Cleaning up cancelled download...');
+        await _cleanupPartialDownload(publicationId);
+      }
       throw Exception('Failed to download publication content: $e');
+    }
+  }
+
+  // Clean up partially downloaded content when download is cancelled
+  Future<void> _cleanupPartialDownload(String publicationId) async {
+    try {
+      print('🧹 === CLEANING UP PARTIAL DOWNLOAD ===');
+      print('📦 Publication ID: $publicationId');
+
+      final directory = await getApplicationDocumentsDirectory();
+
+      // Delete main content JSON file
+      final jsonPath = '${directory.path}/publikasjon_$publicationId.json';
+      final jsonFile = File(jsonPath);
+      if (await jsonFile.exists()) {
+        await jsonFile.delete();
+        print('🗑️ Deleted content JSON: $jsonPath');
+      }
+
+      // Delete all image files for this publication
+      final allFiles = await directory.list().toList();
+      int deletedImages = 0;
+      for (final file in allFiles) {
+        if (file is File) {
+          final fileName = file.path.split(Platform.pathSeparator).last;
+          if (fileName.startsWith('content_img_${publicationId}_') &&
+              fileName.endsWith('.img')) {
+            await file.delete();
+            deletedImages++;
+            print('🗑️ Deleted image: $fileName');
+          }
+        }
+      }
+
+      print('✅ Cleanup completed: Deleted JSON and $deletedImages images');
+    } catch (e) {
+      print('❌ Error during cleanup: $e');
+      // Don't throw - cleanup is best effort
     }
   }
 
@@ -544,7 +614,7 @@ class NewPublicationService {
   List<String> _extractImageUrlsFromHtml(String htmlContent) {
     final imageUrls = <String>[];
     final imgRegex = RegExp(
-        r'<img[^>]+src=["' "'" r']([^"' "'" + r'>]+)["' + "'" + r'][^>]*>',
+        r'<img[^>]+src=["' "'" r']([^"' "'" r'>]+)["' "'" + r'][^>]*>',
         caseSensitive: false);
     final matches = imgRegex.allMatches(htmlContent);
 
