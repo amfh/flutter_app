@@ -254,12 +254,36 @@ class NewPublicationService {
         publicationId,
         isCancelled: isCancelled,
         onProgress: (double imageProgress, String imageStatus) {
-          // Map image progress from 60% to 95% of total progress
-          final totalProgress = 0.6 + (imageProgress * 0.35);
+          // Map image progress from 60% to 85% of total progress
+          final totalProgress = 0.6 + (imageProgress * 0.25);
           final displayStatus = '🖼️ $imageStatus';
           onProgress(totalProgress, displayStatus);
           print(
               '🖼️ Image progress: ${(totalProgress * 100).toInt()}% - $displayStatus');
+        },
+      );
+
+      // Check for cancellation before starting document download
+      if (isCancelled?.call() == true) {
+        print('🛑 Download cancelled by user before document download');
+        await _cleanupPartialDownload(publicationId);
+        throw Exception('Download cancelled by user');
+      }
+
+      onProgress(0.85, '📄 Starter dokumentnedlasting...');
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // Download documents (PDF, XLS, etc.) for offline use
+      await downloadDocumentsForPublication(
+        publicationId,
+        isCancelled: isCancelled,
+        onProgress: (double docProgress, String docStatus) {
+          // Map document progress from 85% to 95% of total progress
+          final totalProgress = 0.85 + (docProgress * 0.10);
+          final displayStatus = '📄 $docStatus';
+          onProgress(totalProgress, displayStatus);
+          print(
+              '📄 Document progress: ${(totalProgress * 100).toInt()}% - $displayStatus');
         },
       );
 
@@ -614,7 +638,7 @@ class NewPublicationService {
   List<String> _extractImageUrlsFromHtml(String htmlContent) {
     final imageUrls = <String>[];
     final imgRegex = RegExp(
-        r'<img[^>]+src=["' "'" r']([^"' "'" r'>]+)["' "'" + r'][^>]*>',
+        r'<img[^>]+src=["' "'" r']([^"' "'" r'>]+)["' "'" r'][^>]*>',
         caseSensitive: false);
     final matches = imgRegex.allMatches(htmlContent);
 
@@ -661,6 +685,359 @@ class NewPublicationService {
     print('📊 === EXTRACTION SUMMARY ===');
     print('🖼️ Total extracted images: ${imageUrls.length}');
     return imageUrls;
+  }
+
+  // Extract document URLs (PDF, XLS, etc.) from HTML content
+  List<String> _extractDocumentUrlsFromHtml(String htmlContent) {
+    final documentUrls = <String>[];
+
+    // Match <a> tags with href pointing to documents
+    final linkRegex = RegExp(
+      r'<a[^>]+href=["'
+      "'"
+      r']([^"'
+      "'"
+      r'>]+\.(pdf|xls|xlsx|doc|docx|ppt|pptx))["'
+      "'"
+      r'][^>]*>',
+      caseSensitive: false,
+    );
+
+    print('🔍 === ANALYZING HTML CONTENT FOR DOCUMENTS ===');
+    print('📄 HTML content length: ${htmlContent.length} characters');
+    final matches = linkRegex.allMatches(htmlContent);
+    print('📊 Found ${matches.length} document link matches');
+
+    for (final match in matches) {
+      final href = match.group(1);
+      final extension = match.group(2);
+      final fullMatch = match.group(0);
+      print(
+          '🔍 Found document link: ${fullMatch?.substring(0, (fullMatch.length).clamp(0, 100))}...');
+      print('🔗 Extracted href: $href (.$extension)');
+
+      if (href != null &&
+          href.isNotEmpty &&
+          !href.startsWith('file://') &&
+          !href.startsWith('data:')) {
+        // Fix localhost URLs for Android emulator
+        final fixedUrl =
+            href.replaceAll('localhost:44342', 'nye.kompetansebiblioteket.no');
+        documentUrls.add(fixedUrl);
+        print('✅ Added document URL: $fixedUrl');
+      } else if (href != null && href.startsWith('file://')) {
+        print('⏭️ Skipping file document: $href');
+      } else {
+        print('❌ Invalid or empty href: $href');
+      }
+    }
+
+    print('📊 === DOCUMENT EXTRACTION SUMMARY ===');
+    print('📄 Total extracted documents: ${documentUrls.length}');
+    return documentUrls;
+  }
+
+  // Download documents for a publication
+  Future<void> downloadDocumentsForPublication(
+    String publicationId, {
+    required Function(double progress, String status) onProgress,
+    Function()? isCancelled,
+  }) async {
+    try {
+      print('📄 === STARTING DOCUMENT DOWNLOAD ===');
+      print('📦 Publication ID: $publicationId');
+
+      onProgress(0.0, 'Sjekker lagret innhold...');
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // Load publication content
+      onProgress(0.1, 'Analyserer dokumenter i innhold...');
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      final chapters = await loadPublicationContent(publicationId);
+      if (chapters == null) {
+        throw Exception(
+            'Kunne ikke laste publikasjonsinnhold for dokumentanalyse.');
+      }
+
+      print('📊 Loaded ${chapters.length} chapters from saved content');
+
+      // Extract all document URLs from the content
+      final documentUrls = <String>{};
+      for (final chapter in chapters) {
+        for (final subchapter in chapter.subchapters) {
+          final urls = _extractDocumentUrlsFromHtml(subchapter.text);
+          documentUrls.addAll(urls);
+        }
+      }
+
+      final totalDocuments = documentUrls.length;
+      print('📄 === DOCUMENT EXTRACTION SUMMARY ===');
+      print('📄 Total unique documents found: $totalDocuments');
+
+      if (totalDocuments == 0) {
+        print('⚠️ === NO DOCUMENTS FOUND ===');
+        onProgress(1.0, 'Ingen dokumenter funnet i innholdet');
+        await Future.delayed(const Duration(milliseconds: 500));
+        return;
+      }
+
+      onProgress(0.2, 'Fant $totalDocuments dokumenter å laste ned');
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      int downloadedCount = 0;
+      final urlsList = documentUrls.toList();
+
+      print('🚀 === STARTING INDIVIDUAL DOCUMENT DOWNLOADS ===');
+
+      for (int i = 0; i < urlsList.length; i++) {
+        final documentUrl = urlsList[i];
+        final progress = 0.2 + (i / urlsList.length) * 0.7;
+
+        print('📥 === DOWNLOADING DOCUMENT ${i + 1}/$totalDocuments ===');
+        print('🔗 URL: $documentUrl');
+        onProgress(progress, 'Laster ned dokument ${i + 1} av $totalDocuments');
+
+        // Check for cancellation
+        if (isCancelled?.call() == true) {
+          print('🛑 Document download cancelled by user');
+          throw Exception('Download cancelled by user');
+        }
+
+        try {
+          await _downloadAndCacheDocumentAsFile(
+              documentUrl, publicationId, i, isCancelled);
+          downloadedCount++;
+          print('✅ Successfully downloaded document ${i + 1}');
+
+          final downloadProgress = 0.2 + ((i + 1) / urlsList.length) * 0.7;
+          onProgress(downloadProgress,
+              'Lastet ned dokument ${i + 1} av $totalDocuments');
+        } catch (e) {
+          print('❌ === DOCUMENT DOWNLOAD FAILED ===');
+          print('🔗 URL: $documentUrl');
+          print('💥 Error: $e');
+          onProgress(progress, 'Feil med dokument ${i + 1} - fortsetter...');
+          // Continue with next document
+        }
+
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+
+      print('📊 === DOCUMENT DOWNLOAD SUMMARY ===');
+      print('✅ Successfully downloaded: $downloadedCount documents');
+      print(
+          '❌ Failed downloads: ${totalDocuments - downloadedCount} documents');
+
+      // Update JSON file to use local file references
+      if (downloadedCount > 0) {
+        print('🔄 Updating JSON file with local document paths...');
+        onProgress(0.95, 'Oppdaterer dokumentlenker i JSON...');
+        await _updateJsonWithLocalDocumentPaths(publicationId, urlsList);
+      }
+
+      onProgress(1.0, 'Dokumenter fullført ($downloadedCount/$totalDocuments)');
+      print(
+          '✅ Document download completed: $downloadedCount/$totalDocuments documents');
+      await Future.delayed(const Duration(milliseconds: 300));
+    } catch (e) {
+      print('❌ Error downloading documents: $e');
+      throw Exception('Feil ved nedlasting av dokumenter: $e');
+    }
+  }
+
+  // Download and cache a single document as a file
+  Future<void> _downloadAndCacheDocumentAsFile(
+      String documentUrl, String publicationId, int index,
+      [Function()? isCancelled]) async {
+    try {
+      print('📥 === DOWNLOADING DOCUMENT ===');
+      print('🔗 URL: $documentUrl');
+      print('📦 Publication: $publicationId');
+      print('🔢 Index: $index');
+
+      // Get file extension
+      final uri = Uri.parse(documentUrl);
+      final pathSegments = uri.pathSegments;
+      final fileName = pathSegments.isNotEmpty ? pathSegments.last : '';
+      final extension =
+          fileName.contains('.') ? fileName.split('.').last : 'pdf';
+
+      print('📄 File extension: $extension');
+
+      // Build full URL
+      String fullUrl = documentUrl;
+      if (!documentUrl.startsWith('http')) {
+        if (documentUrl.startsWith('/')) {
+          fullUrl = 'https://nye.kompetansebiblioteket.no$documentUrl';
+        } else {
+          fullUrl = 'https://nye.kompetansebiblioteket.no/$documentUrl';
+        }
+      }
+
+      print('🌐 Full URL: $fullUrl');
+
+      // Check for cancellation before download
+      if (isCancelled?.call() == true) {
+        print('🛑 Document download cancelled before HTTP request');
+        throw Exception('Download cancelled by user');
+      }
+
+      print('📞 Making HTTP request...');
+      final response = await ApiClient.instance.get(fullUrl);
+
+      print('📊 Response status: ${response.statusCode}');
+      print('📏 Content length: ${response.contentLength}');
+
+      if (response.statusCode == 200) {
+        print('✅ HTTP response OK - reading bytes...');
+
+        // Check for cancellation before reading response body
+        if (isCancelled?.call() == true) {
+          print('🛑 Document download cancelled before reading response');
+          throw Exception('Download cancelled by user');
+        }
+
+        final bytes = await response.expand((chunk) => chunk).toList();
+
+        print('📦 Downloaded ${bytes.length} bytes');
+
+        if (bytes.isNotEmpty) {
+          final filename = 'content_doc_${publicationId}_$index.$extension';
+          final directory = await getApplicationDocumentsDirectory();
+          final file = File('${directory.path}/$filename');
+
+          print('💾 Saving to: ${file.path}');
+          await file.writeAsBytes(bytes);
+
+          // Verify file was written
+          final savedFile = File(file.path);
+          final fileExists = await savedFile.exists();
+          final fileSize = fileExists ? await savedFile.length() : 0;
+
+          print('✅ === DOCUMENT SAVE SUCCESSFUL ===');
+          print('📁 File: $filename');
+          print('📊 Size: ${bytes.length} bytes');
+          print('✓ File exists: $fileExists');
+          print('✓ File size on disk: $fileSize bytes');
+        } else {
+          throw Exception('Tomt dokumentinnhold');
+        }
+      } else {
+        throw Exception('HTTP error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ Error downloading document $index: $e');
+      rethrow;
+    }
+  }
+
+  // Update JSON file to use local document paths instead of network URLs
+  Future<void> _updateJsonWithLocalDocumentPaths(
+      String publicationId, List<String> documentUrls) async {
+    try {
+      print('🔄 Updating JSON file with local document paths...');
+
+      final chapters = await loadPublicationContent(publicationId);
+      if (chapters == null) {
+        print('❌ No chapters found for updating document paths');
+        return;
+      }
+
+      final directory = await getApplicationDocumentsDirectory();
+
+      // Create mapping from original URL to local file path
+      final urlToPathMapping = <String, String>{};
+      for (int i = 0; i < documentUrls.length; i++) {
+        final originalUrl = documentUrls[i];
+
+        // Get file extension
+        final uri = Uri.parse(originalUrl);
+        final pathSegments = uri.pathSegments;
+        final fileName = pathSegments.isNotEmpty ? pathSegments.last : '';
+        final extension =
+            fileName.contains('.') ? fileName.split('.').last : 'pdf';
+
+        final localPath =
+            'file://${directory.path}/content_doc_${publicationId}_$i.$extension';
+
+        urlToPathMapping[originalUrl] = localPath;
+
+        // Also map URL variations
+        final httpsUrl = originalUrl.replaceAll('http://', 'https://');
+        final httpUrl = originalUrl.replaceAll('https://', 'http://');
+        urlToPathMapping[httpsUrl] = localPath;
+        urlToPathMapping[httpUrl] = localPath;
+
+        print('📝 Mapping: $originalUrl -> $localPath');
+      }
+
+      // Update all subchapter text content with local file paths
+      int updatesCount = 0;
+      final updatedChapters = <Chapter>[];
+
+      for (final chapter in chapters) {
+        final updatedSubchapters = <Subchapter>[];
+
+        for (final subchapter in chapter.subchapters) {
+          String updatedText = subchapter.text;
+
+          // Replace all document URLs with local file paths
+          urlToPathMapping.forEach((originalUrl, localPath) {
+            if (updatedText.contains(originalUrl)) {
+              updatedText = updatedText.replaceAll(originalUrl, localPath);
+              updatesCount++;
+              print(
+                  '✅ Replaced "$originalUrl" with "$localPath" in "${subchapter.title}"');
+            }
+          });
+
+          final updatedSubchapter = Subchapter(
+            title: subchapter.title,
+            text: updatedText,
+            number: subchapter.number,
+          );
+
+          updatedSubchapters.add(updatedSubchapter);
+        }
+
+        final updatedChapter = Chapter(
+          title: chapter.title,
+          subtitle: chapter.subtitle,
+          number: chapter.number,
+          abstract: chapter.abstract,
+          subchapters: updatedSubchapters,
+        );
+
+        updatedChapters.add(updatedChapter);
+      }
+
+      // Save updated chapters back to file
+      await savePublicationContent(publicationId, updatedChapters);
+
+      print(
+          '✅ Updated JSON file with $updatesCount local document path replacements');
+    } catch (e) {
+      print('❌ Error updating JSON with document paths: $e');
+    }
+  }
+
+  // Get cached document file for offline viewing
+  Future<File?> getCachedDocumentFile(
+      String publicationId, int index, String extension) async {
+    try {
+      final filename = 'content_doc_${publicationId}_$index.$extension';
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/$filename');
+
+      if (await file.exists()) {
+        return file;
+      }
+    } catch (e) {
+      print('❌ Error getting cached document: $e');
+    }
+
+    return null;
   }
 
   // Download and cache a single image as a file (like old version)

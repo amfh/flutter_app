@@ -1,9 +1,30 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:html_unescape/html_unescape.dart';
 import '../models/new_publication.dart';
 import '../services/new_publication_service.dart';
+import '../services/local_storage_service.dart';
+
+// Helper class to store table cell data with colspan/rowspan
+class TableCellData {
+  final String text;
+  final String htmlContent; // Store original HTML
+  final int colspan;
+  final int rowspan;
+  final TextAlign align;
+
+  TableCellData({
+    required this.text,
+    required this.htmlContent,
+    this.colspan = 1,
+    this.rowspan = 1,
+    this.align = TextAlign.left,
+  });
+}
 
 class NewSubchapterDetailScreen extends StatefulWidget {
   final Publication publication;
@@ -45,12 +66,26 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
         _updatedContent = updatedSubchapter?.text ?? widget.subchapter.text;
         _isLoading = false;
       });
+
+      // Check if images need to be downloaded for this publication
+      _checkAndDownloadImages();
     } catch (e) {
       // Error loading updated content
       setState(() {
         _updatedContent = widget.subchapter.text;
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _checkAndDownloadImages() async {
+    try {
+      print(
+          '🖼️ Checking if images are available for publication ${widget.publication.id}');
+      print(
+          '💡 If images are missing, go to "Min side" to download offline content.');
+    } catch (e) {
+      print('❌ Error checking images: $e');
     }
   }
 
@@ -117,20 +152,21 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
   }
 
   Widget _buildBody(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-          16.0, 16.0, 16.0, 100.0), // Extra bottom padding for floating bar
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Subchapter header
-          _buildHeader(),
-          const SizedBox(height: 24),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Subchapter header (non-scrolling)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 0),
+          child: _buildHeader(),
+        ),
+        const SizedBox(height: 24),
 
-          // Content
-          _buildContent(context),
-        ],
-      ),
+        // Content (scrollable WebView takes remaining space)
+        Expanded(
+          child: _buildContent(context),
+        ),
+      ],
     );
   }
 
@@ -169,8 +205,561 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
   }
 
   Widget _buildContent(BuildContext context) {
-    return _buildContentWithTables(
-        _updatedContent ?? widget.subchapter.text, context);
+    // Use WebView to render HTML with processed MathJax
+    return FutureBuilder<String>(
+      future: _prepareHtmlWithImages(_updatedContent ?? widget.subchapter.text),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Forbereder innhold med bilder...'),
+              ],
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error, color: Colors.red, size: 48),
+                const SizedBox(height: 16),
+                Text('Feil ved lasting av innhold: ${snapshot.error}'),
+              ],
+            ),
+          );
+        }
+        return _buildWebViewContent(snapshot.data ?? '');
+      },
+    );
+  }
+
+  Future<String> _prepareHtmlWithImages(String htmlContent) async {
+    print('🖼️ ========================================');
+    print('🖼️ PREPARING HTML WITH CACHED IMAGES');
+    print('🖼️ ========================================');
+    print('🖼️ HTML content length: ${htmlContent.length} chars');
+
+    // First, let's see what img tags exist in the HTML
+    final allImgPattern = RegExp(r'<img[^>]*>', caseSensitive: false);
+    final allImgs = allImgPattern.allMatches(htmlContent).toList();
+    print('🖼️ Total img tags found in HTML: ${allImgs.length}');
+
+    // Print first few img tags (with truncation for readability)
+    for (var i = 0; i < allImgs.length && i < 3; i++) {
+      final imgTag = allImgs[i].group(0) ?? '';
+      final displayTag =
+          imgTag.length > 200 ? '${imgTag.substring(0, 200)}...' : imgTag;
+      print('🖼️ Img tag $i: $displayTag');
+    }
+
+    // Also check what's in the HTML around images
+    final srcPattern =
+        RegExp('src=[\"\']([^\"\']{0,100})[\"\']', caseSensitive: false);
+    final srcMatches = srcPattern.allMatches(htmlContent).toList();
+    print('🖼️ Found ${srcMatches.length} src attributes in HTML');
+    for (var i = 0; i < srcMatches.length && i < 5; i++) {
+      final src = srcMatches[i].group(1) ?? '';
+      print('🖼️ Src $i: $src');
+    }
+
+    String processedHtml = htmlContent;
+    int successCount = 0;
+    int failCount = 0;
+
+    // Pattern 1: cached:// URLs (format: cached://publicationId/imageIndex)
+    final cachedPattern = RegExp(
+      '<img([^>]*)src=[\"\']cached://([^/]+)/(\\d+)[\"\']([^>]*)>',
+      caseSensitive: false,
+    );
+
+    // Pattern 2: file:// URLs (format: file:///path/to/image)
+    final filePattern = RegExp(
+      '<img([^>]*)src=[\"\']file://([^\"\']+)[\"\']([^>]*)>',
+      caseSensitive: false,
+    );
+
+    final cachedMatches = cachedPattern.allMatches(htmlContent).toList();
+    final fileMatches = filePattern.allMatches(htmlContent).toList();
+
+    print('🖼️ Found ${cachedMatches.length} img tags with cached:// URLs');
+    print('🖼️ Found ${fileMatches.length} img tags with file:// URLs');
+
+    // Process cached:// URLs
+    for (final match in cachedMatches) {
+      final beforeSrc = match.group(1) ?? '';
+      final publicationId = match.group(2);
+      final imageIndex = match.group(3);
+      final afterSrc = match.group(4) ?? '';
+
+      print('🖼️ ----------------------------------------');
+      print('🖼️ Processing cached:// image:');
+      print('🖼️   Publication ID: $publicationId');
+      print('🖼️   Image Index: $imageIndex');
+
+      try {
+        final filename = 'content_img_${publicationId}_$imageIndex.img';
+        print('🖼️   Looking for file: $filename');
+
+        final imageFile = await LocalStorageService.readImageFile(filename);
+
+        if (imageFile != null && await imageFile.exists()) {
+          final fileSize = await imageFile.length();
+          print('✅   FOUND cached image: ${imageFile.path}');
+          print('✅   File size: $fileSize bytes');
+
+          final imageBytes = await imageFile.readAsBytes();
+          final base64Image = base64Encode(imageBytes);
+
+          String mimeType = 'image/jpeg';
+          if (imageBytes.length >= 2) {
+            if (imageBytes[0] == 0x89 && imageBytes[1] == 0x50) {
+              mimeType = 'image/png';
+            } else if (imageBytes[0] == 0x47 && imageBytes[1] == 0x49) {
+              mimeType = 'image/gif';
+            } else if (imageBytes[0] == 0xFF && imageBytes[1] == 0xD8) {
+              mimeType = 'image/jpeg';
+            } else if (imageBytes[0] == 0x52 && imageBytes[1] == 0x49) {
+              mimeType = 'image/webp';
+            }
+          }
+
+          print('✅   Detected MIME type: $mimeType');
+
+          final dataUrl = 'data:$mimeType;base64,$base64Image';
+          final originalTag = match.group(0)!;
+          final newTag = '<img${beforeSrc}src="$dataUrl"$afterSrc>';
+          processedHtml = processedHtml.replaceFirst(originalTag, newTag);
+
+          print('✅   Successfully replaced with base64 data URL');
+          successCount++;
+        } else {
+          print('❌   Cached image NOT FOUND: $filename');
+          failCount++;
+        }
+      } catch (e) {
+        print('❌   ERROR processing cached:// image:');
+        print('❌   Error: $e');
+        failCount++;
+      }
+    }
+
+    // Process file:// URLs
+    for (final match in fileMatches) {
+      final beforeSrc = match.group(1) ?? '';
+      final filePath = match.group(2) ?? '';
+      final afterSrc = match.group(3) ?? '';
+
+      print('🖼️ ----------------------------------------');
+      print('🖼️ Processing file:// image:');
+      print('🖼️   File path: $filePath');
+
+      try {
+        // Use the ACTUAL file path from the file:// URL
+        // filePath is like: /data/user/0/com.example.flutter_app/app_flutter/content_img_...img
+        final imageFile = File(filePath);
+
+        print('🖼️   Checking file at: ${imageFile.path}');
+
+        if (await imageFile.exists()) {
+          final fileSize = await imageFile.length();
+          print('✅   FOUND file:// image: ${imageFile.path}');
+          print('✅   File size: $fileSize bytes');
+
+          final imageBytes = await imageFile.readAsBytes();
+          final base64Image = base64Encode(imageBytes);
+
+          String mimeType = 'image/jpeg';
+          if (imageBytes.length >= 2) {
+            if (imageBytes[0] == 0x89 && imageBytes[1] == 0x50) {
+              mimeType = 'image/png';
+            } else if (imageBytes[0] == 0x47 && imageBytes[1] == 0x49) {
+              mimeType = 'image/gif';
+            } else if (imageBytes[0] == 0xFF && imageBytes[1] == 0xD8) {
+              mimeType = 'image/jpeg';
+            } else if (imageBytes[0] == 0x52 && imageBytes[1] == 0x49) {
+              mimeType = 'image/webp';
+            }
+          }
+
+          print('✅   Detected MIME type: $mimeType');
+
+          final dataUrl = 'data:$mimeType;base64,$base64Image';
+          final originalTag = match.group(0)!;
+          final newTag = '<img${beforeSrc}src="$dataUrl"$afterSrc>';
+          processedHtml = processedHtml.replaceFirst(originalTag, newTag);
+
+          print('✅   Successfully replaced file:// with base64 data URL');
+          successCount++;
+        } else {
+          print('❌   File:// image NOT FOUND at path: ${imageFile.path}');
+
+          // Add placeholder
+          final originalTag = match.group(0)!;
+          final placeholderSvg =
+              '''<svg width="100%" height="200" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100%" height="100%" fill="#FFF3CD" stroke="#856404" stroke-width="2"/>
+            <text x="50%" y="40%" text-anchor="middle" fill="#856404" font-size="16" font-weight="bold">
+              ⚠️ Bilde ikke funnet
+            </text>
+            <text x="50%" y="55%" text-anchor="middle" fill="#856404" font-size="14">
+              Filsti: ${filePath.length > 40 ? '...${filePath.substring(filePath.length - 40)}' : filePath}
+            </text>
+          </svg>''';
+          final placeholderDataUrl =
+              'data:image/svg+xml;base64,${base64Encode(utf8.encode(placeholderSvg))}';
+          final newTag = '<img${beforeSrc}src="$placeholderDataUrl"$afterSrc>';
+          processedHtml = processedHtml.replaceFirst(originalTag, newTag);
+
+          failCount++;
+        }
+      } catch (e) {
+        print('❌   ERROR processing file:// image:');
+        print('❌   Error: $e');
+        failCount++;
+      }
+    }
+
+    print('🖼️ ========================================');
+    print('🖼️ HTML PREPARATION COMPLETE');
+    print('🖼️ Success: $successCount images');
+    print('🖼️ Failed: $failCount images');
+    print('🖼️ Processed HTML length: ${processedHtml.length} chars');
+
+    // Debug: Print a sample of processed HTML if images were found
+    if (successCount > 0 || failCount > 0) {
+      final sampleLength =
+          processedHtml.length > 500 ? 500 : processedHtml.length;
+      print('🖼️ Sample of processed HTML (first $sampleLength chars):');
+      print(processedHtml.substring(0, sampleLength));
+    }
+
+    print('🖼️ ========================================');
+
+    return processedHtml;
+  }
+
+  Widget _buildWebViewContent(String htmlContent) {
+    // Fix brackets in table cells while preserving MathJax in formulas
+    String processedHtml = htmlContent;
+
+    // First: Fix brackets within td/th tags (table cells) - simple text brackets
+    // This handles cases like [ m / s ] or [ kg / m 3 ] in tables
+    processedHtml = processedHtml.replaceAllMapped(
+        RegExp(r'(<t[dh][^>]*>)(.*?)(</t[dh]>)', dotAll: true), (match) {
+      String openTag = match.group(1) ?? '';
+      String cellContent = match.group(2) ?? '';
+      String closeTag = match.group(3) ?? '';
+
+      // Within table cells, replace brackets with non-breaking version
+      cellContent = cellContent.replaceAllMapped(
+          RegExp(r'\[([^\]]{1,50}?)\]', dotAll: true), (bracketMatch) {
+        String content = bracketMatch.group(1) ?? '';
+        // Only process if it doesn't contain complex MathJax (has span/div tags)
+        if (!content.contains('<span') && !content.contains('<div')) {
+          // Remove simple HTML tags
+          content = content.replaceAll(RegExp(r'<[^>]+>'), '');
+          // Replace all whitespace with non-breaking spaces
+          content = content.replaceAll(RegExp(r'\s+'), '&nbsp;');
+          return '<nobr>[$content]</nobr>';
+        }
+        return bracketMatch.group(0) ?? '';
+      });
+
+      return '$openTag$cellContent$closeTag';
+    });
+
+    // Second: Fix simple brackets outside tables (like in paragraphs)
+    // but skip those that are already wrapped in nobr or contain MathJax
+    processedHtml = processedHtml.replaceAllMapped(
+        RegExp(r'(?<!<nobr>)\[([^\]]{1,50}?)\](?!</nobr>)', dotAll: true),
+        (match) {
+      String fullMatch = match.group(0) ?? '';
+      String content = match.group(1) ?? '';
+
+      // Skip if this looks like it's part of MathJax (contains span/div tags)
+      if (content.contains('<span') || content.contains('<div')) {
+        return fullMatch;
+      }
+
+      // Check if already processed (inside nobr)
+      if (fullMatch.contains('nobr')) {
+        return fullMatch;
+      }
+
+      // Process simple brackets
+      content = content.replaceAll(RegExp(r'<[^>]+>'), '');
+      content = content.replaceAll(RegExp(r'\s+'), '&nbsp;');
+      return '<nobr>[$content]</nobr>';
+    });
+
+    // Wrap content in a complete HTML document with proper styling
+    final wrappedHtml = '''
+<!DOCTYPE html>
+<html style="height: auto; min-height: 100%;">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            height: auto;
+            min-height: 100%;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 16px;
+            line-height: 1.6;
+            color: #333;
+            padding: 16px;
+            padding-bottom: 100px;
+            margin: 0;
+            background-color: white;
+            overflow-x: hidden;
+            max-width: 100%;
+        }
+        
+        table {
+            width: 100% !important;
+            border-collapse: collapse;
+            margin: 16px 0;
+            max-width: 100%;
+            table-layout: fixed;
+        }
+        
+        td, th {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+            vertical-align: top;
+        }
+        
+        /* Only apply nowrap to small content cells, not wrapper cells */
+        td:not(.BlueTextBoxWrapper):not(.WhiteTextBoxWrapper):not(.BlueTextBoxWrapperContent):not(.WhiteTextBoxWrapperContent),
+        th:not(.BlueTextBoxWrapper):not(.WhiteTextBoxWrapper):not(.BlueTextBoxWrapperContent):not(.WhiteTextBoxWrapperContent) {
+            white-space: nowrap;
+        }
+        
+        /* Wrapper cells should allow text wrapping */
+        td.BlueTextBoxWrapper,
+        td.WhiteTextBoxWrapper,
+        td.BlueTextBoxWrapperContent,
+        td.WhiteTextBoxWrapperContent {
+            white-space: normal;
+            word-wrap: break-word;
+        }
+        
+        th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+        }
+        
+        a {
+            color: #0974ba;
+            text-decoration: none;
+        }
+        
+        a:hover {
+            text-decoration: underline;
+        }
+        
+        /* MathJax display styles - keep existing MathJax formatting */
+        .MathJax_Display {
+            text-align: center;
+            margin: 1em 0;
+            overflow-x: auto;
+        }
+        
+        .MathJax {
+            display: inline-block !important;
+            white-space: nowrap !important;
+        }
+        
+        .MathJax * {
+            white-space: nowrap !important;
+        }
+        
+        /* Ensure MathJax spans stay inline */
+        .math {
+            display: inline-block !important;
+            white-space: nowrap !important;
+        }
+        
+        /* MathJax text elements */
+        .mtext {
+            white-space: nowrap !important;
+            display: inline !important;
+        }
+        
+        /* All MathJax span elements */
+        span.MathJax,
+        span.math,
+        span.mrow,
+        span.mstyle,
+        span.msub,
+        span.mi,
+        span.mo,
+        span.mtext {
+            display: inline-block !important;
+            white-space: nowrap !important;
+        }
+        
+        /* nobr elements should have normal font size and not be subscript */
+        nobr {
+            font-size: inherit !important;
+            vertical-align: baseline !important;
+            display: inline !important;
+            white-space: nowrap !important;
+        }
+        
+        /* Blue box wrapper */
+        .BlueTextBoxWrapper {
+            background-color: #E3F2FD;
+            border: 2px solid #0974ba;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        
+        /* White box wrapper */
+        .WhiteTextBoxWrapper {
+            background-color: white;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        
+        /* Handle nested tables in content boxes */
+        .BlueTextBoxWrapper table,
+        .WhiteTextBoxWrapper table,
+        .BlueTextBoxWrapperContent table,
+        .WhiteTextBoxWrapperContent table {
+            border: none;
+            margin: 0;
+            width: 100%;
+            max-width: 100%;
+            table-layout: auto;
+        }
+        
+        .BlueTextBoxWrapper td,
+        .WhiteTextBoxWrapper td,
+        .BlueTextBoxWrapperContent td,
+        .WhiteTextBoxWrapperContent td {
+            border: none;
+            white-space: normal !important;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            padding: 0;
+        }
+        
+        /* Images */
+        img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 8px 0;
+        }
+        
+        /* Headings */
+        h1, h2, h3, h4, h5, h6 {
+            color: #0974ba;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+        }
+        
+        /* Paragraphs */
+        p {
+            margin: 0.5em 0;
+        }
+        
+        /* Lists */
+        ul, ol {
+            padding-left: 20px;
+            margin: 0.5em 0;
+        }
+        
+        li {
+            margin: 0.25em 0;
+        }
+        
+        /* Prevent text selection issues */
+        .math {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        
+        /* Handle formula numbers in MathJax */
+        .mtext[style*="dodgerblue"] {
+            color: #0974ba !important;
+        }
+    </style>
+    <script>
+        // Send height to Flutter when content loads
+        window.addEventListener('load', function() {
+            const height = document.body.scrollHeight;
+            console.log('Content height: ' + height);
+        });
+        
+        // Handle dynamic content changes
+        const observer = new MutationObserver(function() {
+            const height = document.body.scrollHeight;
+            console.log('Content height changed: ' + height);
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    </script>
+</head>
+<body>
+    $processedHtml
+</body>
+</html>
+''';
+
+    final controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.white)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onNavigationRequest: (NavigationRequest request) {
+            // Handle link clicks
+            if (request.url.startsWith('http://') ||
+                request.url.startsWith('https://')) {
+              print('🔗 Opening external link: ${request.url}');
+              _launchUrl(request.url);
+              return NavigationDecision.prevent;
+            }
+            return NavigationDecision.navigate;
+          },
+          onPageFinished: (String url) {
+            print('📄 WebView page loaded');
+          },
+        ),
+      )
+      ..loadHtmlString(wrappedHtml);
+
+    // Return WebView that fills available space
+    // The WebView will handle its own scrolling
+    return WebViewWidget(controller: controller);
+  }
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      print('❌ Could not launch $url');
+    }
   }
 
   // Build content with custom table parsing
@@ -382,11 +971,648 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
     return widgets;
   }
 
+  // Build content box (for BlueTextBoxWrapper and WhiteTextBoxWrapper nested tables)
+  Widget _buildContentBox(String tableHtml) {
+    // Determine which type of box this is
+    final isBlueBox = tableHtml.contains('BlueTextBoxWrapper');
+
+    // Extract the inner content from nested table structure
+    // Try BlueTextBoxWrapperContent first, then WhiteTextBoxWrapperContent
+    RegExpMatch? contentMatch = RegExp(
+      r'<td[^>]*class="BlueTextBoxWrapperContent"[^>]*>(.*?)</td>',
+      caseSensitive: false,
+      dotAll: true,
+    ).firstMatch(tableHtml);
+
+    if (contentMatch == null) {
+      contentMatch = RegExp(
+        r'<td[^>]*class="WhiteTextBoxWrapperContent"[^>]*>(.*?)</td>',
+        caseSensitive: false,
+        dotAll: true,
+      ).firstMatch(tableHtml);
+    }
+
+    if (contentMatch != null) {
+      final content = contentMatch.group(1) ?? '';
+
+      // Define colors based on box type
+      final backgroundColor = isBlueBox
+          ? const Color(0xFFE3F2FD) // Light blue for BlueTextBoxWrapper
+          : Colors.white; // White for WhiteTextBoxWrapper
+      final borderColor = isBlueBox
+          ? const Color(0xFF0974ba) // VVS blue border
+          : Colors.grey[400]!; // Grey border for white box
+
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          border: Border.all(
+            color: borderColor,
+            width: 2,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Html(
+          data: content,
+          style: {
+            'body': Style(
+              margin: Margins.zero,
+              padding: HtmlPaddings.zero,
+              fontSize: FontSize(16),
+              lineHeight: const LineHeight(1.5),
+            ),
+            'p': Style(
+              margin: Margins.zero,
+              padding: HtmlPaddings.zero,
+              lineHeight: const LineHeight(1.5),
+            ),
+            'sub': Style(
+              fontSize: FontSize(12),
+              verticalAlign: VerticalAlign.sub,
+            ),
+            'sup': Style(
+              fontSize: FontSize(12),
+              verticalAlign: VerticalAlign.sup,
+            ),
+            'a': Style(
+              color: Colors.blue,
+              textDecoration: TextDecoration.underline,
+            ),
+            'table': Style(
+              margin: Margins.symmetric(vertical: 8),
+            ),
+          },
+          extensions: [
+            TagExtension(
+              tagsToExtend: {'math'},
+              builder: (extensionContext) {
+                final mathml = extensionContext.element?.outerHtml ?? '';
+                print('📐 Rendering MathML with flutter_math_fork');
+                return _buildFormulaFromMathML(mathml, isBlueBox);
+              },
+            ),
+          ],
+          onLinkTap: (url, attributes, element) {
+            if (url != null) {
+              print('🔗 Link tapped: $url');
+              // Handle link navigation here if needed
+            }
+          },
+        ),
+      );
+    }
+
+    // Fallback: just render the HTML
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE3F2FD),
+        border: Border.all(color: const Color(0xFF0974ba), width: 2),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Html(
+        data: tableHtml,
+        style: _getHtmlStyle(),
+      ),
+    );
+  }
+
+  // Build formula box from MathJax/MathML content
+  // Build formula widget from MathML HTML (used in flutter_html TagExtension)
+  Widget _buildFormulaFromMathML(String mathmlHtml, bool isBlueBox) {
+    print('📐 Building formula from MathML');
+    print(
+        '📐 MathML HTML: ${mathmlHtml.substring(0, mathmlHtml.length > 200 ? 200 : mathmlHtml.length)}...');
+
+    // Decode HTML entities
+    final decodedContent = HtmlUnescape().convert(mathmlHtml);
+
+    // Extract the main content from mstyle
+    final mstyleMatch = RegExp(
+      r'<mstyle[^>]*>(.*?)</mstyle>',
+      caseSensitive: false,
+      dotAll: true,
+    ).firstMatch(decodedContent);
+
+    final mathContent =
+        mstyleMatch != null ? (mstyleMatch.group(1) ?? '') : decodedContent;
+
+    Widget? formulaWidget;
+    String? formulaNumber;
+
+    // Try to extract formula number from mtext
+    final mtextMatch = RegExp(
+      r'<mtext[^>]*>([^<]+)</mtext>',
+      caseSensitive: false,
+      dotAll: true,
+    ).firstMatch(mathContent);
+
+    if (mtextMatch != null) {
+      formulaNumber = mtextMatch.group(1)?.replaceAll('&nbsp;', ' ').trim();
+      print('🔢 Formula number: $formulaNumber');
+    }
+
+    // Check if there's a fraction (mfrac)
+    final mfracPattern = RegExp(
+      r'<mfrac[^>]*>(.*?)</mfrac>',
+      caseSensitive: false,
+      dotAll: true,
+    );
+    final mfracMatches = mfracPattern.allMatches(mathContent).toList();
+
+    if (mfracMatches.isNotEmpty) {
+      print('🔢 Found ${mfracMatches.length} fraction(s)');
+
+      // Build complete formula with multiple fractions
+      final List<Widget> formulaChildren = [];
+      int currentPos = 0;
+
+      for (int i = 0; i < mfracMatches.length; i++) {
+        final mfracMatch = mfracMatches[i];
+
+        // Get content before this fraction
+        if (currentPos < mfracMatch.start) {
+          final beforeFrac =
+              mathContent.substring(currentPos, mfracMatch.start);
+
+          // Check for = sign
+          final equalsMatch = RegExp(r'<mo[^>]*>=</mo>', caseSensitive: false)
+              .firstMatch(beforeFrac);
+
+          if (equalsMatch != null) {
+            // Add left side
+            if (equalsMatch.start > 0) {
+              final leftSide = beforeFrac.substring(0, equalsMatch.start);
+              formulaChildren.add(_buildMathMLWidget(leftSide, 18));
+            }
+
+            // Add = sign
+            formulaChildren.add(const SizedBox(width: 8));
+            formulaChildren.add(const Text('=',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)));
+            formulaChildren.add(const SizedBox(width: 8));
+
+            // Add content after = but before fraction
+            if (equalsMatch.end < beforeFrac.length) {
+              final afterEquals = beforeFrac.substring(equalsMatch.end);
+              if (afterEquals.trim().isNotEmpty) {
+                formulaChildren.add(_buildMathMLWidget(afterEquals, 18));
+              }
+            }
+          } else {
+            // No = sign, just add content
+            if (beforeFrac.trim().isNotEmpty) {
+              formulaChildren.add(_buildMathMLWidget(beforeFrac, 18));
+            }
+          }
+        }
+
+        // Parse and add the fraction
+        final fractionContent = mfracMatch.group(1) ?? '';
+
+        // Split into numerator and denominator
+        final mrowPattern = RegExp(r'<mrow[^>]*>(.*?)</mrow>',
+            caseSensitive: false, dotAll: true);
+        final mrowMatches = mrowPattern.allMatches(fractionContent).toList();
+
+        String numeratorMathML = '';
+        String denominatorMathML = '';
+
+        if (mrowMatches.length >= 2) {
+          numeratorMathML = mrowMatches[0].group(1) ?? '';
+          denominatorMathML = mrowMatches[1].group(1) ?? '';
+        } else if (mrowMatches.length == 1) {
+          numeratorMathML = mrowMatches[0].group(1) ?? '';
+          denominatorMathML = fractionContent.substring(mrowMatches[0].end);
+        } else {
+          final halfPoint = fractionContent.length ~/ 2;
+          numeratorMathML = fractionContent.substring(0, halfPoint);
+          denominatorMathML = fractionContent.substring(halfPoint);
+        }
+
+        // Build fraction widget
+        formulaChildren.add(
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildMathMLWidget(numeratorMathML, 16),
+              Container(
+                width: 80,
+                height: 1.5,
+                color: Colors.black,
+                margin: const EdgeInsets.symmetric(vertical: 4),
+              ),
+              _buildMathMLWidget(denominatorMathML, 16),
+            ],
+          ),
+        );
+
+        currentPos = mfracMatch.end;
+      }
+
+      // Add any remaining content after the last fraction
+      if (currentPos < mathContent.length) {
+        final afterLastFrac = mathContent.substring(currentPos);
+        if (afterLastFrac.trim().isNotEmpty) {
+          formulaChildren.add(_buildMathMLWidget(afterLastFrac, 18));
+        }
+      }
+
+      // Build the complete formula
+      formulaWidget = Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: formulaChildren,
+      );
+    } else {
+      // No fraction - simple inline formula
+      formulaWidget = _buildMathMLWidget(mathContent, 18);
+    }
+
+    // Return formula widget with formula number if available
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        formulaWidget,
+        if (formulaNumber != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            formulaNumber,
+            style: TextStyle(
+              fontSize: 14,
+              color: isBlueBox ? Colors.blue[700] : Colors.grey[700],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ],
+    );
+  }
+
+  // Extract text from MathML content
+  String _extractTextFromMathML(String mathml) {
+    String result = mathml;
+
+    // First, handle msub (subscript) elements - convert to text with subscript marker
+    result = result.replaceAllMapped(
+      RegExp(r'<msub[^>]*>(.*?)</msub>', caseSensitive: false, dotAll: true),
+      (match) {
+        final msubContent = match.group(1) ?? '';
+        final miPattern = RegExp(r'<mi[^>]*>(.*?)</mi>', caseSensitive: false);
+        final miMatches = miPattern.allMatches(msubContent).toList();
+
+        if (miMatches.length >= 2) {
+          final base = miMatches[0].group(1) ?? '';
+          final subscript = miMatches[1].group(1) ?? '';
+          return '$base$subscript'; // Combine for now, will handle in _buildMathText
+        }
+        return match.group(0) ?? '';
+      },
+    );
+
+    // Now extract all elements in order
+    final elements = <MapEntry<int, String>>[];
+
+    // Extract mi (identifiers)
+    final miPattern = RegExp(r'<mi[^>]*>(.*?)</mi>', caseSensitive: false);
+    for (final match in miPattern.allMatches(result)) {
+      elements.add(MapEntry(match.start, match.group(1) ?? ''));
+    }
+
+    // Extract mo (operators)
+    final moPattern = RegExp(r'<mo[^>]*>(.*?)</mo>', caseSensitive: false);
+    for (final match in moPattern.allMatches(result)) {
+      var op = match.group(1) ?? '';
+      op = _decodeHtmlEntities(op);
+      if (op == '·') {
+        elements.add(MapEntry(match.start, ' · '));
+      } else if (op.trim().isNotEmpty) {
+        elements.add(MapEntry(match.start, op));
+      }
+    }
+
+    // Extract mn (numbers)
+    final mnPattern = RegExp(r'<mn[^>]*>(.*?)</mn>', caseSensitive: false);
+    for (final match in mnPattern.allMatches(result)) {
+      elements.add(MapEntry(match.start, match.group(1) ?? ''));
+    }
+
+    // Sort by position to maintain order
+    elements.sort((a, b) => a.key.compareTo(b.key));
+
+    // Join the parts
+    return elements.map((e) => e.value).join('');
+  }
+
+  // Build math text with subscripts
+  Widget _buildMathText(String text, double fontSize) {
+    // Check for subscript pattern (like Dh)
+    final subscriptPattern = RegExp(r'([A-Za-z]+)([a-z])$');
+    final match = subscriptPattern.firstMatch(text);
+
+    if (match != null && match.group(1)!.length == 1) {
+      final base = match.group(1)!;
+      final subscript = match.group(2)!;
+
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            base,
+            style: TextStyle(
+              fontSize: fontSize,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Text(
+              subscript,
+              style: TextStyle(
+                fontSize: fontSize * 0.7,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // No subscript, return normal text
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: fontSize,
+        fontStyle: FontStyle.italic,
+      ),
+    );
+  }
+
+  // Build widget from MathML content (handles subscripts and operators)
+  Widget _buildMathMLWidget(String mathml, double fontSize) {
+    final widgets = <Widget>[];
+
+    // Find all msub (subscript) elements
+    final msubPattern =
+        RegExp(r'<msub[^>]*>(.*?)</msub>', caseSensitive: false, dotAll: true);
+    final msubMatches = msubPattern.allMatches(mathml).toList();
+
+    // Find all mi elements (outside of msub)
+    final miPattern = RegExp(r'<mi[^>]*>(.*?)</mi>', caseSensitive: false);
+
+    // Find all mo (operator) elements
+    final moPattern = RegExp(r'<mo[^>]*>(.*?)</mo>', caseSensitive: false);
+
+    // Build list of all elements with positions
+    final elements = <MapEntry<int, dynamic>>[];
+
+    // Add msub elements
+    for (final match in msubMatches) {
+      final msubContent = match.group(1) ?? '';
+      final miMatches = miPattern.allMatches(msubContent).toList();
+      if (miMatches.length >= 2) {
+        final base = miMatches[0].group(1) ?? '';
+        final subscript = miMatches[1].group(1) ?? '';
+        elements.add(MapEntry(match.start,
+            {'type': 'msub', 'base': base, 'subscript': subscript}));
+      }
+    }
+
+    // Add mi elements that are NOT inside msub
+    for (final match in miPattern.allMatches(mathml)) {
+      // Check if this mi is inside any msub
+      bool insideMsub = false;
+      for (final msubMatch in msubMatches) {
+        if (match.start >= msubMatch.start && match.end <= msubMatch.end) {
+          insideMsub = true;
+          break;
+        }
+      }
+      if (!insideMsub) {
+        elements.add(MapEntry(
+            match.start, {'type': 'mi', 'text': match.group(1) ?? ''}));
+      }
+    }
+
+    // Add mo elements
+    for (final match in moPattern.allMatches(mathml)) {
+      var op = match.group(1) ?? '';
+      op = _decodeHtmlEntities(op);
+      elements.add(MapEntry(match.start, {'type': 'mo', 'text': op}));
+    }
+
+    // Sort by position
+    elements.sort((a, b) => a.key.compareTo(b.key));
+
+    // Build widgets
+    for (final element in elements) {
+      final data = element.value as Map<String, dynamic>;
+
+      if (data['type'] == 'msub') {
+        // Build subscript widget
+        widgets.add(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                data['base'],
+                style: TextStyle(
+                  fontSize: fontSize,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2, left: 1),
+                child: Text(
+                  data['subscript'],
+                  style: TextStyle(
+                    fontSize: fontSize * 0.7,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      } else if (data['type'] == 'mi') {
+        widgets.add(
+          Text(
+            data['text'],
+            style: TextStyle(
+              fontSize: fontSize,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        );
+      } else if (data['type'] == 'mo') {
+        widgets.add(
+          Text(
+            data['text'],
+            style: TextStyle(
+              fontSize: fontSize,
+            ),
+          ),
+        );
+      }
+    }
+
+    if (widgets.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    if (widgets.length == 1) {
+      return widgets[0];
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: widgets,
+    );
+  }
+
+  // Decode common HTML entities
+  String _decodeHtmlEntities(String text) {
+    return text
+        .replaceAll('&middot;', '·')
+        .replaceAll('&#183;', '·')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'")
+        .replaceAll('&ndash;', '–')
+        .replaceAll('&#8211;', '–')
+        .replaceAll('&mdash;', '—')
+        .replaceAll('&#8212;', '—')
+        .replaceAll('&times;', '×')
+        .replaceAll('&#215;', '×')
+        .replaceAll('&divide;', '÷')
+        .replaceAll('&#247;', '÷');
+  }
+
+  // Clean MathJax content from table cells
+  String _cleanMathJaxForCell(String content) {
+    // Extract text from MathML <math> tag
+    final mathMatch = RegExp(
+      r'<math[^>]*>(.*?)</math>',
+      caseSensitive: false,
+      dotAll: true,
+    ).firstMatch(content);
+
+    if (mathMatch != null) {
+      final mathContent = mathMatch.group(1) ?? '';
+
+      // Extract text from <mtext> tags
+      final mtextPattern = RegExp(
+        r'<mtext[^>]*>(.*?)</mtext>',
+        caseSensitive: false,
+        dotAll: true,
+      );
+
+      final mtextMatches = mtextPattern.allMatches(mathContent);
+      if (mtextMatches.isNotEmpty) {
+        final texts = <String>[];
+        for (final match in mtextMatches) {
+          String text = match.group(1) ?? '';
+          // Clean up the text - remove inner tags but keep subscripts/superscripts
+          text = text
+              .replaceAllMapped(
+                RegExp(r'<mi[^>]*>(.*?)</mi>', caseSensitive: false),
+                (m) => m.group(1) ?? '',
+              )
+              .replaceAllMapped(
+                RegExp(r'<mo[^>]*>(.*?)</mo>', caseSensitive: false),
+                (m) => m.group(1) ?? '',
+              )
+              .replaceAllMapped(
+                RegExp(r'<mn[^>]*>(.*?)</mn>', caseSensitive: false),
+                (m) => m.group(1) ?? '',
+              )
+              .replaceAllMapped(
+                RegExp(r'<msup[^>]*>(.*?)</msup>',
+                    caseSensitive: false, dotAll: true),
+                (m) {
+                  final supContent = m.group(1) ?? '';
+                  // Extract base and exponent
+                  final parts =
+                      RegExp(r'<m[in][^>]*>(.*?)</m[in]>', caseSensitive: false)
+                          .allMatches(supContent)
+                          .map((e) => e.group(1) ?? '')
+                          .toList();
+                  if (parts.length >= 2) {
+                    return '${parts[0]}<sup>${parts[1]}</sup>';
+                  }
+                  return supContent;
+                },
+              )
+              .replaceAll(RegExp(r'<span[^>]*>'), '')
+              .replaceAll('</span>', '')
+              .trim();
+
+          if (text.isNotEmpty) {
+            texts.add(text);
+          }
+        }
+
+        if (texts.isNotEmpty) {
+          return texts.join(' ');
+        }
+      }
+
+      // If no mtext, try to extract from msub (for subscripts like Dh)
+      final msubMatch = RegExp(
+        r'<msub[^>]*>(.*?)</msub>',
+        caseSensitive: false,
+        dotAll: true,
+      ).firstMatch(mathContent);
+
+      if (msubMatch != null) {
+        final msubContent = msubMatch.group(1) ?? '';
+        final miPattern = RegExp(r'<mi[^>]*>(.*?)</mi>', caseSensitive: false);
+        final miMatches = miPattern.allMatches(msubContent).toList();
+
+        if (miMatches.length >= 2) {
+          final base = miMatches[0].group(1) ?? '';
+          final subscript = miMatches[1].group(1) ?? '';
+          return '$base<sub>$subscript</sub>';
+        }
+      }
+    }
+
+    // Fallback: remove MathJax span and script tags
+    return content
+        .replaceAll(
+            RegExp(r'<span class="MathJax"[^>]*>.*?</span>',
+                caseSensitive: false, dotAll: true),
+            '')
+        .replaceAll(
+            RegExp(r'<script[^>]*>.*?</script>',
+                caseSensitive: false, dotAll: true),
+            '')
+        .trim();
+  }
+
   // Build extracted table widget
   Widget _buildExtractedTable(String tableHtml) {
     try {
       print('📊 DEBUG: Building table from HTML...');
       print('📊 DEBUG: Table HTML length: ${tableHtml.length}');
+
+      // Check if this is a nested table (BlueTextBoxWrapper or WhiteTextBoxWrapper pattern)
+      // These should be rendered as content boxes, not tables
+      if (tableHtml.contains('BlueTextBoxWrapper') ||
+          tableHtml.contains('WhiteTextBoxWrapper')) {
+        print('📊 DEBUG: Detected TextBoxWrapper - rendering as content box');
+        return _buildContentBox(tableHtml);
+      }
 
       // Parse table rows
       final rowPattern =
@@ -410,15 +1636,15 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
         );
       }
 
-      // Parse all rows as data
-      final dataRows = <List<String>>[];
+      // Parse all rows with colspan/rowspan support
+      final parsedRows = <List<TableCellData>>[];
       bool hasHeaders = false;
 
       for (int i = 0; i < rows.length; i++) {
         final cellContent = rows[i].group(1) ?? '';
-        final cells = _parseTableCells(cellContent);
+        final cells = _parseTableCellsWithSpan(cellContent);
         if (cells.isNotEmpty) {
-          dataRows.add(cells);
+          parsedRows.add(cells);
           // Check if first row contains th elements (headers)
           if (i == 0 && cellContent.toLowerCase().contains('<th')) {
             hasHeaders = true;
@@ -426,7 +1652,7 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
         }
       }
 
-      if (dataRows.isEmpty) {
+      if (parsedRows.isEmpty) {
         return Container(
           margin: const EdgeInsets.symmetric(vertical: 16),
           padding: const EdgeInsets.all(8),
@@ -441,53 +1667,168 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
         );
       }
 
-      // Find the maximum number of columns
-      final maxColumns = dataRows
-          .map((row) => row.length)
-          .fold<int>(0, (max, length) => length > max ? length : max);
+      // Calculate total columns needed (accounting for colspan)
+      int maxColumns = 0;
+      for (final row in parsedRows) {
+        int rowWidth = 0;
+        for (final cell in row) {
+          rowWidth += cell.colspan;
+        }
+        if (rowWidth > maxColumns) {
+          maxColumns = rowWidth;
+        }
+      }
 
-      // Use Table widget for better control
+      print('📊 DEBUG: Max columns (with colspan): $maxColumns');
+
+      // Build table using Column of Rows (Table widget doesn't support colspan properly)
+      final tableChildren = <Widget>[];
+
+      // Track which cells span multiple rows
+      final Map<int, int> activeRowspans = {}; // colIndex -> remaining rows
+
+      for (int rowIndex = 0; rowIndex < parsedRows.length; rowIndex++) {
+        final row = parsedRows[rowIndex];
+        final rowWidgets = <Widget>[];
+        int cellIndexInRow = 0;
+        int currentColIndex = 0;
+
+        // Determine background color for headers
+        final isHeaderRow = hasHeaders && rowIndex == 0;
+
+        // Process cells, accounting for rowspan from previous rows
+        while (currentColIndex < maxColumns) {
+          // Check if this column is occupied by a rowspan from a previous row
+          if (activeRowspans.containsKey(currentColIndex) &&
+              activeRowspans[currentColIndex]! > 0) {
+            // This column is occupied by a rowspan, add an invisible placeholder
+            rowWidgets.add(
+              Expanded(
+                flex: 1,
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!, width: 0.5),
+                  ),
+                  // Empty container to maintain grid structure
+                ),
+              ),
+            );
+            activeRowspans[currentColIndex] =
+                activeRowspans[currentColIndex]! - 1;
+            if (activeRowspans[currentColIndex]! <= 0) {
+              activeRowspans.remove(currentColIndex);
+            }
+            currentColIndex++;
+            continue;
+          }
+
+          // Get the actual cell data if it exists
+          if (cellIndexInRow < row.length) {
+            final cell = row[cellIndexInRow];
+
+            // Process cell content - clean MathJax if present
+            String cellContent = cell.htmlContent;
+            if (cellContent.contains('MathJax') ||
+                cellContent.contains('<math')) {
+              cellContent = _cleanMathJaxForCell(cellContent);
+            }
+
+            // Build the cell widget
+            final cellWidget = Container(
+              padding: const EdgeInsets.all(8.0),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!, width: 0.5),
+                color: isHeaderRow ? Colors.grey[100] : null,
+              ),
+              child: Html(
+                data: cellContent,
+                style: {
+                  'body': Style(
+                    margin: Margins.zero,
+                    padding: HtmlPaddings.zero,
+                    fontSize: FontSize(14),
+                    fontWeight:
+                        isHeaderRow ? FontWeight.bold : FontWeight.normal,
+                    textAlign: cell.align == TextAlign.center
+                        ? TextAlign.center
+                        : cell.align == TextAlign.right
+                            ? TextAlign.right
+                            : TextAlign.left,
+                  ),
+                  'sub': Style(
+                    fontSize: FontSize(10),
+                    verticalAlign: VerticalAlign.sub,
+                  ),
+                  'sup': Style(
+                    fontSize: FontSize(10),
+                    verticalAlign: VerticalAlign.sup,
+                  ),
+                },
+              ),
+            );
+
+            // Add cell with colspan support using Expanded
+            rowWidgets.add(
+              Expanded(
+                flex: cell.colspan,
+                child: cellWidget,
+              ),
+            );
+
+            // If this cell has rowspan > 1, track it for the columns it occupies
+            if (cell.rowspan > 1) {
+              for (int i = 0; i < cell.colspan; i++) {
+                activeRowspans[currentColIndex + i] = cell.rowspan - 1;
+              }
+            }
+
+            currentColIndex += cell.colspan;
+            cellIndexInRow++;
+          } else {
+            // No more cells in this row, add empty cell
+            rowWidgets.add(
+              Expanded(
+                flex: 1,
+                child: Container(
+                  padding: const EdgeInsets.all(8.0),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!, width: 0.5),
+                  ),
+                ),
+              ),
+            );
+            currentColIndex++;
+          }
+        }
+
+        tableChildren.add(
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: rowWidgets,
+            ),
+          ),
+        );
+      }
+
+      // Use Column of Rows to build the table
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey[300]!, width: 1),
+        ),
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          child: Table(
-            border: TableBorder.all(
-              color: Colors.grey[300]!,
-              width: 1,
+          child: IntrinsicWidth(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: tableChildren,
             ),
-            defaultColumnWidth: const IntrinsicColumnWidth(),
-            children: dataRows.map((row) {
-              // Pad row to match max columns
-              final paddedRow = List<String>.from(row);
-              while (paddedRow.length < maxColumns) {
-                paddedRow.add('');
-              }
-
-              return TableRow(
-                decoration: hasHeaders && dataRows.indexOf(row) == 0
-                    ? BoxDecoration(color: Colors.grey[100])
-                    : null,
-                children: paddedRow
-                    .map((cell) => Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Text(
-                            cell.trim(),
-                            style: TextStyle(
-                              fontWeight:
-                                  hasHeaders && dataRows.indexOf(row) == 0
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                            ),
-                          ),
-                        ))
-                    .toList(),
-              );
-            }).toList(),
           ),
         ),
       );
     } catch (e) {
+      print('❌ Error building table: $e');
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 16),
         padding: const EdgeInsets.all(8),
@@ -503,24 +1844,107 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
     }
   }
 
-  // Parse table cells from HTML
-  List<String> _parseTableCells(String rowHtml) {
-    print('📊 DEBUG: Parsing table cells from: $rowHtml');
-    final cellPattern = RegExp(r'<t[hd][^>]*>(.*?)</t[hd]>',
-        caseSensitive: false, dotAll: true);
-    final cells = cellPattern
-        .allMatches(rowHtml)
-        .map((match) => match.group(1) ?? '')
-        .map((cell) => _stripHtmlTags(cell))
-        .toList();
-    print('📊 DEBUG: Parsed cells: $cells');
+  // Parse table cells with colspan and rowspan support
+  List<TableCellData> _parseTableCellsWithSpan(String rowHtml) {
+    print('📊 DEBUG: Parsing table cells with span from: $rowHtml');
+
+    final cellPattern = RegExp(
+      r'<t([hd])\s*([^>]*)>(.*?)</t\1>',
+      caseSensitive: false,
+      dotAll: true,
+    );
+
+    final cells = <TableCellData>[];
+
+    for (final match in cellPattern.allMatches(rowHtml)) {
+      final attributes = match.group(2) ?? '';
+      final content = match.group(3) ?? '';
+
+      // Parse colspan
+      int colspan = 1;
+      final colspanMatch = RegExp(
+              r'colspan\s*=\s*["' r"'" r']?(\d+)["' r"'" r']?',
+              caseSensitive: false)
+          .firstMatch(attributes);
+      if (colspanMatch != null) {
+        colspan = int.tryParse(colspanMatch.group(1) ?? '1') ?? 1;
+      }
+
+      // Parse rowspan (not fully supported yet, but we parse it)
+      int rowspan = 1;
+      final rowspanMatch = RegExp(
+              r'rowspan\s*=\s*["' r"'" r']?(\d+)["' r"'" r']?',
+              caseSensitive: false)
+          .firstMatch(attributes);
+      if (rowspanMatch != null) {
+        rowspan = int.tryParse(rowspanMatch.group(1) ?? '1') ?? 1;
+      }
+
+      // Parse align
+      TextAlign align = TextAlign.left;
+      final alignMatch = RegExp(
+              r'align\s*=\s*["' r"'" r']?(left|center|right)["' r"'" r']?',
+              caseSensitive: false)
+          .firstMatch(attributes);
+      if (alignMatch != null) {
+        final alignValue = alignMatch.group(1)?.toLowerCase();
+        if (alignValue == 'center') {
+          align = TextAlign.center;
+        } else if (alignValue == 'right') {
+          align = TextAlign.right;
+        }
+      }
+
+      final text = _stripHtmlTags(content);
+
+      cells.add(TableCellData(
+        text: text,
+        htmlContent: content, // Store original HTML content
+        colspan: colspan,
+        rowspan: rowspan,
+        align: align,
+      ));
+
+      print(
+          '📊 DEBUG: Parsed cell: "$text" (colspan: $colspan, rowspan: $rowspan, align: $align)');
+    }
+
     return cells;
   }
 
   // Strip HTML tags from text
   String _stripHtmlTags(String htmlText) {
     print('📊 DEBUG: Stripping HTML from: "$htmlText"');
-    final result = htmlText
+
+    // First handle subscript and superscript with Unicode equivalents
+    String result = htmlText;
+
+    // Handle subscript (with dotAll to match across newlines)
+    result = result.replaceAllMapped(
+      RegExp(r'<sub[^>]*>(.*?)</sub>', caseSensitive: false, dotAll: true),
+      (match) {
+        final innerHtml = match.group(1) ?? '';
+        // Strip any inner HTML tags first
+        final text = innerHtml.replaceAll(RegExp(r'<[^>]*>'), '').trim();
+        // Convert to Unicode subscript characters
+        return _convertToSubscript(text);
+      },
+    );
+
+    // Handle superscript (with dotAll to match across newlines)
+    result = result.replaceAllMapped(
+      RegExp(r'<sup[^>]*>(.*?)</sup>', caseSensitive: false, dotAll: true),
+      (match) {
+        final innerHtml = match.group(1) ?? '';
+        // Strip any inner HTML tags first
+        final text = innerHtml.replaceAll(RegExp(r'<[^>]*>'), '').trim();
+        // Convert to Unicode superscript characters
+        return _convertToSuperscript(text);
+      },
+    );
+
+    // Now remove all other HTML tags
+    result = result
         .replaceAll(RegExp(r'<[^>]*>'), '')
         .replaceAll('&nbsp;', ' ')
         .replaceAll('&amp;', '&')
@@ -528,6 +1952,75 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
         .replaceAll('&gt;', '>')
         .replaceAll('&quot;', '"')
         .replaceAll('&#39;', "'")
+        .replaceAll('&ndash;', '–') // En dash
+        .replaceAll('&#8211;', '–') // En dash numeric
+        .replaceAll('&mdash;', '—') // Em dash
+        .replaceAll('&#8212;', '—') // Em dash numeric
+        .replaceAll('&middot;', '·') // Middle dot (multiplication)
+        .replaceAll('&#183;', '·') // Middle dot numeric
+        .replaceAll('&bull;', '•') // Bullet point
+        .replaceAll('&#8226;', '•') // Bullet point numeric
+        // Greek letters
+        .replaceAll('&lambda;', 'λ') // Lambda
+        .replaceAll('&#955;', 'λ') // Lambda numeric
+        .replaceAll('&Lambda;', 'Λ') // Capital Lambda
+        .replaceAll('&#923;', 'Λ') // Capital Lambda numeric
+        .replaceAll('&alpha;', 'α') // Alpha
+        .replaceAll('&#945;', 'α') // Alpha numeric
+        .replaceAll('&beta;', 'β') // Beta
+        .replaceAll('&#946;', 'β') // Beta numeric
+        .replaceAll('&gamma;', 'γ') // Gamma
+        .replaceAll('&#947;', 'γ') // Gamma numeric
+        .replaceAll('&delta;', 'δ') // Delta
+        .replaceAll('&#948;', 'δ') // Delta numeric
+        .replaceAll('&epsilon;', 'ε') // Epsilon
+        .replaceAll('&#949;', 'ε') // Epsilon numeric
+        .replaceAll('&eta;', 'η') // Eta
+        .replaceAll('&#951;', 'η') // Eta numeric
+        .replaceAll('&theta;', 'θ') // Theta
+        .replaceAll('&#952;', 'θ') // Theta numeric
+        .replaceAll('&mu;', 'μ') // Mu
+        .replaceAll('&#956;', 'μ') // Mu numeric
+        .replaceAll('&pi;', 'π') // Pi
+        .replaceAll('&#960;', 'π') // Pi numeric
+        .replaceAll('&rho;', 'ρ') // Rho
+        .replaceAll('&#961;', 'ρ') // Rho numeric
+        .replaceAll('&sigma;', 'σ') // Sigma
+        .replaceAll('&#963;', 'σ') // Sigma numeric
+        .replaceAll('&tau;', 'τ') // Tau
+        .replaceAll('&#964;', 'τ') // Tau numeric
+        .replaceAll('&phi;', 'φ') // Phi
+        .replaceAll('&#966;', 'φ') // Phi numeric
+        .replaceAll('&omega;', 'ω') // Omega
+        .replaceAll('&#969;', 'ω') // Omega numeric
+        .replaceAll('&Omega;', 'Ω') // Capital Omega
+        .replaceAll('&#937;', 'Ω') // Capital Omega numeric
+        .replaceAll('&deg;', '°')
+        .replaceAll('&#176;', '°')
+        .replaceAll('&plusmn;', '±')
+        .replaceAll('&#177;', '±')
+        .replaceAll('&times;', '×')
+        .replaceAll('&#215;', '×')
+        .replaceAll('&divide;', '÷')
+        .replaceAll('&#247;', '÷')
+        .replaceAll('&frac12;', '½')
+        .replaceAll('&#189;', '½')
+        .replaceAll('&frac14;', '¼')
+        .replaceAll('&#188;', '¼')
+        .replaceAll('&frac34;', '¾')
+        .replaceAll('&#190;', '¾')
+        .replaceAll('&micro;', 'µ')
+        .replaceAll('&#181;', 'µ')
+        .replaceAll('&euro;', '€')
+        .replaceAll('&#8364;', '€')
+        .replaceAll('&pound;', '£')
+        .replaceAll('&#163;', '£')
+        .replaceAll('&yen;', '¥')
+        .replaceAll('&#165;', '¥')
+        .replaceAll('&sup2;', '²')
+        .replaceAll('&#178;', '²')
+        .replaceAll('&sup3;', '³')
+        .replaceAll('&#179;', '³')
         .replaceAll('&aring;', 'å')
         .replaceAll('&Aring;', 'Å')
         .replaceAll('&#229;', 'å')
@@ -542,6 +2035,102 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
         .replaceAll('&#198;', 'Æ')
         .trim();
     print('📊 DEBUG: Stripped result: "$result"');
+    return result;
+  }
+
+  // Convert text to Unicode subscript characters
+  String _convertToSubscript(String text) {
+    String result = text;
+    // Numbers
+    result = result
+        .replaceAll('0', '₀')
+        .replaceAll('1', '₁')
+        .replaceAll('2', '₂')
+        .replaceAll('3', '₃')
+        .replaceAll('4', '₄')
+        .replaceAll('5', '₅')
+        .replaceAll('6', '₆')
+        .replaceAll('7', '₇')
+        .replaceAll('8', '₈')
+        .replaceAll('9', '₉');
+    // Lowercase letters (limited Unicode support)
+    result = result
+        .replaceAll('a', 'ₐ')
+        .replaceAll('e', 'ₑ')
+        .replaceAll('h', 'ₕ')
+        .replaceAll('i', 'ᵢ')
+        .replaceAll('j', 'ⱼ')
+        .replaceAll('k', 'ₖ')
+        .replaceAll('l', 'ₗ')
+        .replaceAll('m', 'ₘ')
+        .replaceAll('n', 'ₙ')
+        .replaceAll('o', 'ₒ')
+        .replaceAll('p', 'ₚ')
+        .replaceAll('r', 'ᵣ')
+        .replaceAll('s', 'ₛ')
+        .replaceAll('t', 'ₜ')
+        .replaceAll('u', 'ᵤ')
+        .replaceAll('v', 'ᵥ')
+        .replaceAll('x', 'ₓ');
+    // Symbols
+    result = result
+        .replaceAll('+', '₊')
+        .replaceAll('-', '₋')
+        .replaceAll('=', '₌')
+        .replaceAll('(', '₍')
+        .replaceAll(')', '₎');
+    return result;
+  }
+
+  // Convert text to Unicode superscript characters
+  String _convertToSuperscript(String text) {
+    String result = text;
+    // Numbers
+    result = result
+        .replaceAll('0', '⁰')
+        .replaceAll('1', '¹')
+        .replaceAll('2', '²')
+        .replaceAll('3', '³')
+        .replaceAll('4', '⁴')
+        .replaceAll('5', '⁵')
+        .replaceAll('6', '⁶')
+        .replaceAll('7', '⁷')
+        .replaceAll('8', '⁸')
+        .replaceAll('9', '⁹');
+    // Letters (limited Unicode support)
+    result = result
+        .replaceAll('a', 'ᵃ')
+        .replaceAll('b', 'ᵇ')
+        .replaceAll('c', 'ᶜ')
+        .replaceAll('d', 'ᵈ')
+        .replaceAll('e', 'ᵉ')
+        .replaceAll('f', 'ᶠ')
+        .replaceAll('g', 'ᵍ')
+        .replaceAll('h', 'ʰ')
+        .replaceAll('i', 'ⁱ')
+        .replaceAll('j', 'ʲ')
+        .replaceAll('k', 'ᵏ')
+        .replaceAll('l', 'ˡ')
+        .replaceAll('m', 'ᵐ')
+        .replaceAll('n', 'ⁿ')
+        .replaceAll('o', 'ᵒ')
+        .replaceAll('p', 'ᵖ')
+        .replaceAll('r', 'ʳ')
+        .replaceAll('s', 'ˢ')
+        .replaceAll('t', 'ᵗ')
+        .replaceAll('u', 'ᵘ')
+        .replaceAll('v', 'ᵛ')
+        .replaceAll('w', 'ʷ')
+        .replaceAll('x', 'ˣ')
+        .replaceAll('y', 'ʸ')
+        .replaceAll('z', 'ᶻ');
+    // Symbols
+    result = result
+        .replaceAll('+', '⁺')
+        .replaceAll('-', '⁻')
+        .replaceAll('=', '⁼')
+        .replaceAll('(', '⁽')
+        .replaceAll(')', '⁾');
     return result;
   }
 
@@ -575,6 +2164,7 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
       ),
       'p': Style(
         margin: Margins.only(bottom: 12),
+        lineHeight: const LineHeight(1.5),
       ),
       'ul': Style(
         margin: Margins.only(bottom: 12),
@@ -609,13 +2199,30 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
       'img': Style(
         margin: Margins.only(bottom: 12),
       ),
+      'sub': Style(
+        fontSize: FontSize(12),
+        verticalAlign: VerticalAlign.sub,
+      ),
+      'sup': Style(
+        fontSize: FontSize(12),
+        verticalAlign: VerticalAlign.sup,
+      ),
     };
   }
 
   void _handleLinkTap(String? url, BuildContext context) {
     if (url == null) return;
 
-    // For now, just show the URL
+    print('🔗 Link tapped: $url');
+
+    // Check if it's a local file (cached document)
+    if (url.startsWith('file://')) {
+      print('📄 Opening local document: $url');
+      _openLocalDocument(url, context);
+      return;
+    }
+
+    // For network links, show URL
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Lenke: $url'),
@@ -625,6 +2232,284 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _openLocalDocument(String fileUrl, BuildContext context) async {
+    try {
+      final filePath = fileUrl.substring(7); // Remove 'file://'
+      final file = File(filePath);
+
+      if (await file.exists()) {
+        final fileName = filePath.split(Platform.pathSeparator).last;
+        final extension = fileName.contains('.')
+            ? fileName.split('.').last.toLowerCase()
+            : '';
+
+        print('📄 Opening document: $fileName (.$extension)');
+
+        // Show dialog with file info
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (BuildContext context) => AlertDialog(
+              title: Row(
+                children: [
+                  Icon(
+                    _getFileIcon(extension),
+                    color: const Color(0xFF0974ba),
+                    size: 28,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Dokument lastet ned',
+                      style: TextStyle(fontSize: 18),
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Dokumentet er lagret lokalt:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F9FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF0974ba).withOpacity(0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _getFileIcon(extension),
+                          color: const Color(0xFF0974ba),
+                          size: 32,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                fileName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              FutureBuilder<int>(
+                                future: file.length(),
+                                builder: (context, snapshot) {
+                                  if (snapshot.hasData) {
+                                    return Text(
+                                      _formatFileSize(snapshot.data!),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    );
+                                  }
+                                  return const SizedBox.shrink();
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Dokumentet er tilgjengelig offline. Åpne med en ekstern app for å se innholdet.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Lukk'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _shareOrOpenFile(file, context);
+                  },
+                  icon: const Icon(Icons.open_in_new, size: 18),
+                  label: const Text('Åpne'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0974ba),
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+      } else {
+        print('❌ File does not exist: $filePath');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Dokumentet er ikke lastet ned ennå'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Error opening document: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Feil ved åpning av dokument: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  IconData _getFileIcon(String extension) {
+    switch (extension) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'xls':
+      case 'xlsx':
+        return Icons.table_chart;
+      case 'doc':
+      case 'docx':
+        return Icons.description;
+      case 'ppt':
+      case 'pptx':
+        return Icons.slideshow;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) {
+      return '$bytes B';
+    } else if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    } else {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+  }
+
+  Future<void> _shareOrOpenFile(File file, BuildContext context) async {
+    try {
+      print('📂 Attempting to open file: ${file.path}');
+
+      // Create file URI
+      final uri = Uri.file(file.path);
+      print('🔗 File URI: $uri');
+
+      // Try to launch the file
+      final canLaunch = await canLaunchUrl(uri);
+      print('🔍 Can launch: $canLaunch');
+
+      if (canLaunch) {
+        final launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+
+        if (launched) {
+          print('✅ File opened successfully');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Dokumentet åpnes...'),
+                duration: Duration(seconds: 2),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } else {
+          print('❌ Failed to launch file');
+          throw Exception('Kunne ikke åpne filen');
+        }
+      } else {
+        print('⚠️ Cannot launch file URI');
+        throw Exception('Ingen app tilgjengelig for å åpne denne filtypen');
+      }
+    } catch (e) {
+      print('❌ Error opening file: $e');
+
+      if (context.mounted) {
+        // Show error with file path as fallback
+        showDialog(
+          context: context,
+          builder: (BuildContext context) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.warning, color: Colors.orange, size: 28),
+                SizedBox(width: 8),
+                Text('Kunne ikke åpne fil'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Filen kunne ikke åpnes automatisk. Du kan finne den på:',
+                  style: TextStyle(color: Colors.grey[700]),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: SelectableText(
+                    file.path,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Tips: Installer en PDF-leser eller dokumentvisningsapp fra App Store/Google Play.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
   }
 
   bool _hasPreviousChapter() {

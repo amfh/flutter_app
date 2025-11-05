@@ -21,9 +21,10 @@ dependencies:
   aad_b2c_webview: ^0.1.0
   jwt_decoder: ^2.0.1
   webview_flutter: ^4.0.7
+  url_launcher: ^6.3.1
 
 dev_dependencies:
-  flutter_launcher_icons: ^0.13.1
+  flutter_launcher_icons: ^0.14.4
 
 flutter_launcher_icons:
   android: true
@@ -41,5 +42,6 @@ flutter:
   assets:
     - assets/publications.json
     - assets/product_publications_mapping.json
+    - assets/icon/kompetansebiblioteket_logo.png
 
 # Run 'flutter pub get' to install the new dependencies.

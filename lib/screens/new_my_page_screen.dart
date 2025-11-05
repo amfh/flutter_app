@@ -181,46 +181,127 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
 
   Widget _buildUserInfoCard() {
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: Colors.grey[300]!,
+          width: 1,
+        ),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.person,
-                  color: Theme.of(context).primaryColor,
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0974ba),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.person,
+                    color: Colors.white,
+                    size: 20,
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 const Text(
                   'Brukerinformasjon',
                   style: TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1a1a1a),
                   ),
                 ),
               ],
             ),
-            const Divider(),
-            Row(
-              children: [
-                const Text(
-                  'E-post: ',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
-                Text(_userData?.email ?? 'Ukjent'),
-              ],
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F9FF),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.email_outlined,
+                    size: 18,
+                    color: Colors.grey[700],
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'E-post',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _userData?.email ?? 'Ukjent',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF1a1a1a),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Text(
-                  'Sist pålogging: ',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
-                Text(_formatDate(_userData?.lastUpdated)),
-              ],
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.access_time,
+                    size: 18,
+                    color: Colors.grey[700],
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Sist pålogging',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _formatDate(_userData?.lastUpdated),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF1a1a1a),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -230,43 +311,103 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
 
   Widget _buildSubscriptionsCard() {
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: Colors.grey[300]!,
+          width: 1,
+        ),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.card_membership,
-                  color: Theme.of(context).primaryColor,
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0974ba),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.card_membership,
+                    color: Colors.white,
+                    size: 20,
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 const Text(
                   'Mine abonnementer',
                   style: TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1a1a1a),
                   ),
                 ),
               ],
             ),
-            const Divider(),
+            const SizedBox(height: 16),
             if (_userData?.subscriptions.isEmpty ?? true) ...[
-              const Text('Ingen abonnementer funnet'),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.grey[600],
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Ingen abonnementer funnet',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ] else ...[
               ..._userData!.subscriptions.map((sub) => Padding(
                     padding: const EdgeInsets.only(bottom: 12.0),
                     child: Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
+                        gradient: sub.isActive
+                            ? LinearGradient(
+                                colors: [
+                                  const Color(0xFF2E7D32).withOpacity(0.1),
+                                  const Color(0xFF2E7D32).withOpacity(0.05),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              )
+                            : LinearGradient(
+                                colors: [
+                                  Colors.red[400]!.withOpacity(0.1),
+                                  Colors.red[400]!.withOpacity(0.05),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(
                           color: sub.isActive
-                              ? Colors.green[300]!
-                              : Colors.red[300]!,
+                              ? const Color(0xFF2E7D32).withOpacity(0.3)
+                              : Colors.red[400]!.withOpacity(0.3),
+                          width: 1.5,
                         ),
-                        borderRadius: BorderRadius.circular(8),
-                        color: sub.isActive ? Colors.green[50] : Colors.red[50],
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -277,84 +418,117 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
                                 sub.isActive
                                     ? Icons.check_circle
                                     : Icons.cancel,
-                                size: 20,
-                                color: sub.isActive ? Colors.green : Colors.red,
+                                size: 22,
+                                color: sub.isActive
+                                    ? const Color(0xFF2E7D32)
+                                    : Colors.red[600],
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
                                   sub.name,
                                   style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
+                                    fontWeight: FontWeight.w600,
                                     fontSize: 16,
+                                    color: Color(0xFF1a1a1a),
                                   ),
                                 ),
                               ),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
+                                  horizontal: 12,
+                                  vertical: 6,
                                 ),
                                 decoration: BoxDecoration(
-                                  color:
-                                      sub.isActive ? Colors.green : Colors.red,
-                                  borderRadius: BorderRadius.circular(12),
+                                  color: sub.isActive
+                                      ? const Color(0xFF2E7D32)
+                                      : Colors.red[600],
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: (sub.isActive
+                                              ? const Color(0xFF2E7D32)
+                                              : Colors.red[600]!)
+                                          .withOpacity(0.3),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
                                 child: Text(
                                   sub.isActive ? 'Aktiv' : 'Utløpt',
                                   style: const TextStyle(
                                     color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.3,
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.calendar_today,
-                                size: 16,
-                                color: Colors.grey[600],
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Utløper: ',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.calendar_today_outlined,
+                                  size: 16,
                                   color: Colors.grey[700],
                                 ),
-                              ),
-                              Text(
-                                sub.expiryDate != null
-                                    ? _formatDate(sub.expiryDate!)
-                                    : 'Ingen utløpsdato',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: sub.isActive
-                                      ? Colors.grey[700]
-                                      : Colors.red,
-                                  fontWeight: sub.isActive
-                                      ? FontWeight.normal
-                                      : FontWeight.w500,
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Utløper: ',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey[700],
+                                  ),
                                 ),
-                              ),
-                            ],
+                                Text(
+                                  sub.expiryDate != null
+                                      ? _formatDate(sub.expiryDate!)
+                                      : 'Ingen utløpsdato',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: sub.isActive
+                                        ? Colors.grey[800]
+                                        : Colors.red[700],
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                           if (sub.expiryDate != null && sub.isActive) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              _getDaysUntilExpiry(sub.expiryDate!),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: _getDaysLeft(sub.expiryDate!) <= 30
-                                    ? Colors.orange[700]
-                                    : Colors.grey[600],
-                                fontStyle: FontStyle.italic,
-                              ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.schedule,
+                                  size: 14,
+                                  color: _getDaysLeft(sub.expiryDate!) <= 30
+                                      ? Colors.orange[700]
+                                      : Colors.grey[600],
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _getDaysUntilExpiry(sub.expiryDate!),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: _getDaysLeft(sub.expiryDate!) <= 30
+                                        ? Colors.orange[700]
+                                        : Colors.grey[600],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ],
@@ -364,26 +538,46 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
             ],
             const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.blue[50],
-                border: Border.all(color: Colors.blue[200]!),
-                borderRadius: BorderRadius.circular(8),
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFF0974ba).withOpacity(0.1),
+                    const Color(0xFF0974ba).withOpacity(0.05),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFF0974ba).withOpacity(0.3),
+                  width: 1,
+                ),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.info_outline,
-                    color: Colors.blue[700],
-                    size: 20,
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0974ba),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(
+                      Icons.info_outline,
+                      color: Colors.white,
+                      size: 18,
+                    ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       'Mangler du abonnement eller har fått nytt abonnement? Logg ut og inn igjen på appen.',
                       style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.blue[800],
+                        fontSize: 14,
+                        color: Colors.grey[800],
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -398,44 +592,94 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
 
   Widget _buildLogoutCard() {
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: Colors.grey[300]!,
+          width: 1,
+        ),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.logout,
-                  color: Theme.of(context).primaryColor,
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red[600],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.logout,
+                    color: Colors.white,
+                    size: 20,
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 const Text(
                   'Logg ut',
                   style: TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1a1a1a),
                   ),
                 ),
               ],
             ),
-            const Divider(),
-            const Text(
-              'Mangler du abonnement eller har fått nytt abonnement? Logg ut og inn igjen på appen.',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey,
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.grey[600],
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Dine nedlastede publikasjoner vil forbli tilgjengelige offline etter utlogging.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[700],
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _logout,
-              icon: const Icon(Icons.logout),
-              label: const Text('Logg ut'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _logout,
+                icon: const Icon(Icons.logout, size: 20),
+                label: const Text(
+                  'Logg ut',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red[600],
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
               ),
             ),
           ],

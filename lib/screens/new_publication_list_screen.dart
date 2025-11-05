@@ -382,25 +382,43 @@ class _NewPublicationListScreenState extends State<NewPublicationListScreen> {
 
   Widget _buildConnectionStatusCard() {
     return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: _isOnline ? const Color(0xFF0974ba) : Colors.grey[400]!,
+          width: 1.5,
+        ),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(
-                  _isOnline ? Icons.wifi : Icons.wifi_off,
-                  color: _isOnline ? Colors.green : Colors.grey,
-                  size: 20,
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color:
+                        _isOnline ? const Color(0xFF0974ba) : Colors.grey[400],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    _isOnline ? Icons.wifi : Icons.wifi_off,
+                    color: Colors.white,
+                    size: 20,
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 Text(
                   _isOnline ? 'Online' : 'Offline',
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: _isOnline ? Colors.green : Colors.grey,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color:
+                        _isOnline ? const Color(0xFF0974ba) : Colors.grey[700],
                   ),
                 ),
                 const Spacer(),
@@ -420,44 +438,71 @@ class _NewPublicationListScreenState extends State<NewPublicationListScreen> {
                         : const Icon(Icons.refresh, size: 18),
                     label: Text(_isRefreshing ? 'Oppdaterer...' : 'Oppdater'),
                     style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0974ba),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                          horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                   ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Text(
               _isOnline
                   ? 'For å sjekke om det er nye versjoner av publikasjoner, trykk på Oppdater. Deretter se om det kommer opp Oppdater knapp ved publikasjon på denne siden.'
                   : 'Du er offline. Koble til internett for å laste ned nye publikasjoner eller oppdateringer.',
               style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
+                fontSize: 14,
+                color: Colors.grey[700],
+                height: 1.4,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.blue[50],
-                border: Border.all(color: Colors.blue[200]!),
-                borderRadius: BorderRadius.circular(8),
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFF0974ba).withOpacity(0.1),
+                    const Color(0xFF0974ba).withOpacity(0.05),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFF0974ba).withOpacity(0.3),
+                  width: 1,
+                ),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.info_outline,
-                    color: Colors.blue[700],
-                    size: 20,
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0974ba),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(
+                      Icons.info_outline,
+                      color: Colors.white,
+                      size: 18,
+                    ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       'Mangler du abonnement eller har fått nytt abonnement? Gå til min side for å sjekke det!',
                       style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.blue[800],
+                        fontSize: 14,
+                        color: Colors.grey[800],
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -474,9 +519,17 @@ class _NewPublicationListScreenState extends State<NewPublicationListScreen> {
       Publication publication, bool isDownloaded, bool hasUpdate) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: Colors.grey[300]!,
+          width: 1,
+        ),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -486,89 +539,170 @@ class _NewPublicationListScreenState extends State<NewPublicationListScreen> {
                   child: Text(
                     publication.name,
                     style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 17,
+                      color: Color(0xFF1a1a1a),
                     ),
                   ),
                 ),
                 if (hasUpdate)
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.orange,
-                      borderRadius: BorderRadius.circular(12),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFF9800), Color(0xFFFF6F00)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.orange.withOpacity(0.3),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: const Text(
                       'Oppdatering',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
                       ),
                     ),
                   ),
               ],
             ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color:
+                    isDownloaded ? const Color(0xFFE8F5E9) : Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isDownloaded ? Icons.check_circle : Icons.download_outlined,
+                    size: 18,
+                    color: isDownloaded
+                        ? const Color(0xFF2E7D32)
+                        : Colors.grey[600],
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    isDownloaded ? 'Lastet ned' : 'Ikke lastet ned',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: isDownloaded
+                          ? const Color(0xFF2E7D32)
+                          : Colors.grey[700],
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
                 Icon(
-                  isDownloaded ? Icons.check_circle : Icons.download,
-                  size: 16,
-                  color: isDownloaded ? Colors.green : Colors.grey,
+                  Icons.calendar_today_outlined,
+                  size: 14,
+                  color: Colors.grey[600],
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 6),
                 Text(
-                  isDownloaded ? 'Lastet ned' : 'Ikke lastet ned',
+                  'Versjon: ${_formatDate(publication.updateDate)}',
                   style: TextStyle(
-                    fontSize: 12,
-                    color: isDownloaded ? Colors.green : Colors.grey,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  'Versjonsdato: ${_formatDate(publication.updateDate)}',
-                  style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 13,
                     color: Colors.grey[600],
                   ),
                 ),
               ],
             ),
             if (!isDownloaded) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () => _downloadPublication(publication),
-                  icon: const Icon(Icons.download),
-                  label: const Text('Last ned'),
+                  icon: const Icon(Icons.download, size: 20),
+                  label: const Text(
+                    'Last ned',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0974ba),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
                 ),
               ),
             ],
             if (isDownloaded && hasUpdate) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () => _downloadPublication(publication),
-                  icon: const Icon(Icons.update),
-                  label: const Text('Oppdater'),
+                  icon: const Icon(Icons.system_update, size: 20),
+                  label: const Text(
+                    'Oppdater',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
+                    backgroundColor: const Color(0xFFFF9800),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
               ),
             ],
             if (isDownloaded) ...[
-              const SizedBox(height: 8),
+              SizedBox(height: hasUpdate ? 8 : 16),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
+                child: OutlinedButton.icon(
                   onPressed: () => _openPublication(publication),
-                  icon: const Icon(Icons.arrow_forward_ios),
-                  label: const Text('Åpne'),
+                  icon: const Icon(Icons.arrow_forward, size: 20),
+                  label: const Text(
+                    'Åpne',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF0974ba),
+                    side: const BorderSide(
+                      color: Color(0xFF0974ba),
+                      width: 1.5,
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -693,34 +827,51 @@ class _NewPublicationListScreenState extends State<NewPublicationListScreen> {
         },
       );
       if (cancelled || dialogClosed || !mounted) return;
-      closeDialog();
-      await Future.delayed(const Duration(milliseconds: 100));
+
+      // Keep progress dialog open and update status
+      if (!cancelled && !dialogClosed && mounted) {
+        try {
+          dialogSetState(() {
+            progress = 1.0;
+            statusText = 'Oppdaterer publikasjonsliste...';
+          });
+        } catch (e) {}
+      }
+
       if (mounted) {
         // Update publication's updateDate after successful download
         await _updatePublicationAfterDownload(publication.id);
 
-        // Show success dialog instead of snackbar
-        showDialog(
-          context: context,
-          builder: (BuildContext context) => AlertDialog(
-            title: const Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 28),
-                SizedBox(width: 8),
-                Text('Nedlasting fullført'),
+        // Reload publications list
+        await _loadPublications();
+
+        // Now close progress dialog
+        closeDialog();
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        // Show success dialog after everything is complete
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (BuildContext context) => AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green, size: 28),
+                  SizedBox(width: 8),
+                  Text('Nedlasting fullført'),
+                ],
+              ),
+              content: Text(
+                  '${publication.name} er lastet ned med bilder og er klar til bruk.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
+                ),
               ],
             ),
-            content: Text(
-                '${publication.name} er lastet ned med bilder og er klar til bruk.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-        _loadPublications();
+          );
+        }
       }
     } catch (e) {
       if (cancelled || dialogClosed) return;
