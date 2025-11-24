@@ -4,12 +4,14 @@ class UserData {
   final String email;
   final List<Subscription> subscriptions;
   final List<Publication> availablePublications;
+  final List<BookmarkedSubchapter> bookmarks;
   final DateTime lastUpdated;
 
   UserData({
     required this.email,
     required this.subscriptions,
     required this.availablePublications,
+    this.bookmarks = const [],
     required this.lastUpdated,
   });
 
@@ -24,6 +26,10 @@ class UserData {
               ?.map((pub) => Publication.fromJson(pub))
               .toList() ??
           [],
+      bookmarks: (json['bookmarks'] as List<dynamic>?)
+              ?.map((b) => BookmarkedSubchapter.fromJson(b))
+              .toList() ??
+          [],
       lastUpdated: DateTime.parse(json['lastUpdated']),
     );
   }
@@ -34,6 +40,7 @@ class UserData {
       'subscriptions': subscriptions.map((s) => s.toJson()).toList(),
       'availablePublications':
           availablePublications.map((p) => p.toJson()).toList(),
+      'bookmarks': bookmarks.map((b) => b.toJson()).toList(),
       'lastUpdated': lastUpdated.toIso8601String(),
     };
   }
@@ -89,4 +96,47 @@ class Subscription {
     if (expiryDate == null) return true;
     return expiryDate!.isAfter(DateTime.now());
   }
+}
+
+class BookmarkedSubchapter {
+  final String publicationId;
+  final String publicationName;
+  final String chapterTitle;
+  final String subchapterTitle;
+  final String? subchapterNumber;
+  final DateTime bookmarkedAt;
+
+  BookmarkedSubchapter({
+    required this.publicationId,
+    required this.publicationName,
+    required this.chapterTitle,
+    required this.subchapterTitle,
+    this.subchapterNumber,
+    required this.bookmarkedAt,
+  });
+
+  factory BookmarkedSubchapter.fromJson(Map<String, dynamic> json) {
+    return BookmarkedSubchapter(
+      publicationId: json['publicationId'] ?? '',
+      publicationName: json['publicationName'] ?? '',
+      chapterTitle: json['chapterTitle'] ?? '',
+      subchapterTitle: json['subchapterTitle'] ?? '',
+      subchapterNumber: json['subchapterNumber'],
+      bookmarkedAt: DateTime.parse(json['bookmarkedAt']),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'publicationId': publicationId,
+      'publicationName': publicationName,
+      'chapterTitle': chapterTitle,
+      'subchapterTitle': subchapterTitle,
+      'subchapterNumber': subchapterNumber,
+      'bookmarkedAt': bookmarkedAt.toIso8601String(),
+    };
+  }
+
+  // Unique identifier for the bookmark
+  String get id => '${publicationId}_${chapterTitle}_$subchapterTitle';
 }

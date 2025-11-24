@@ -75,6 +75,12 @@ class _NewPublicationListScreenState extends State<NewPublicationListScreen> {
         _publications = userData.availablePublications;
       });
 
+      // Debug: Print publication IDs from loaded user data
+      print('🔍 === PUBLICATIONS FROM USER DATA ===');
+      for (final pub in userData.availablePublications) {
+        print('📦 ID: "${pub.id}" | Name: "${pub.name}"');
+      }
+
       // Check internet connection
       await _checkConnectivity();
 
@@ -626,6 +632,28 @@ class _NewPublicationListScreenState extends State<NewPublicationListScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(
+                  Icons.tag,
+                  size: 14,
+                  color: Colors.grey[600],
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'ID: ${publication.id}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[600],
+                      fontFamily: 'monospace',
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
             if (!isDownloaded) ...[
               const SizedBox(height: 16),
               SizedBox(
@@ -732,6 +760,15 @@ class _NewPublicationListScreenState extends State<NewPublicationListScreen> {
   }
 
   Future<void> _downloadPublication(Publication publication) async {
+    print('🔍 === DOWNLOAD BUTTON CLICKED ===');
+    print('📦 Publication ID: "${publication.id}"');
+    print('📦 Publication Name: "${publication.name}"');
+    print('📦 ID Type: ${publication.id.runtimeType}');
+    print('📦 ID Length: ${publication.id.length}');
+    print('📦 ID Bytes: ${publication.id.codeUnits}');
+    print('📦 ID trimmed: "${publication.id.trim()}"');
+    print('📦 ID contains whitespace: ${publication.id.contains(' ')}');
+
     bool cancelled = false;
     double progress = 0.0;
     String statusText = 'Forbereder nedlasting...';
@@ -766,7 +803,7 @@ class _NewPublicationListScreenState extends State<NewPublicationListScreen> {
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircularProgressIndicator(value: progress),
+                const CircularProgressIndicator(),
                 const SizedBox(height: 16),
                 Text('${(progress * 100).toInt()}%',
                     style: const TextStyle(fontWeight: FontWeight.bold)),

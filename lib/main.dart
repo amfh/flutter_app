@@ -541,7 +541,7 @@ class _HomePageState extends State<HomePage> {
             end: Alignment.bottomCenter,
             colors: [
               const Color(0xFF0974ba),
-              const Color(0xFF0974ba).withOpacity(0.8),
+              const Color.fromARGB(255, 83, 94, 101).withOpacity(0.8),
               Colors.white,
             ],
             stops: const [0.0, 0.3, 1.0],

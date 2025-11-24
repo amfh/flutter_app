@@ -5,6 +5,10 @@ import '../models/new_publication.dart';
 import 'api_client.dart';
 
 class NewPublicationService {
+  // 🔧 DEBUG FLAG: Sett til true for å bruke lokal utviklingsserver (10.0.2.2:44342)
+  // Sett til false for å bruke produksjonsserver (nye.kompetansebiblioteket.no)
+  static const bool USE_LOCAL_SERVER = false;
+
   static NewPublicationService? _instance;
   static NewPublicationService get instance {
     _instance ??= NewPublicationService._();
@@ -16,15 +20,16 @@ class NewPublicationService {
   // Fetch all publications from API
   Future<List<Publication>> fetchPublications() async {
     print('📚 Fetching publications from API...');
+    print(
+        '🔧 Debug mode: ${USE_LOCAL_SERVER ? "LOCAL (10.0.2.2:44342)" : "PRODUCTION (nye.kompetansebiblioteket.no)"}');
 
-    final urls = [
-      'https://nye.kompetansebiblioteket.no/umbraco/api/AppApi/GetPublications',
-      'https://nye.kompetansebiblioteket.no/umbraco/api/AppApi/GetPublications',
-      // 'https://localhost:44342/umbraco/api/AppApi/GetPublications',
-      // 'https://127.0.0.1:44342/umbraco/api/AppApi/GetPublications',
-      // 'http://localhost:44342/umbraco/api/AppApi/GetPublications',
-      // 'http://127.0.0.1:44342/umbraco/api/AppApi/GetPublications',
-    ];
+    final urls = USE_LOCAL_SERVER
+        ? [
+            'https://10.0.2.2:44342/umbraco/api/AppApi/GetPublications',
+          ]
+        : [
+            'https://nye.kompetansebiblioteket.no/umbraco/api/AppApi/GetPublications',
+          ];
 
     for (String url in urls) {
       try {
@@ -42,6 +47,13 @@ class NewPublicationService {
 
           print(
               '📚 Successfully fetched ${publications.length} publications from $url');
+
+          // Debug: Print publication IDs to verify they are correct
+          print('🔍 === PUBLICATION IDs FROM API ===');
+          for (final pub in publications) {
+            print('📦 ID: "${pub.id}" | Name: "${pub.name}"');
+          }
+
           return publications;
         } else {
           print('❌ API error from $url: ${response.statusCode}');
@@ -60,12 +72,22 @@ class NewPublicationService {
   // Fetch publication content by ID with timeout
   Future<List<Chapter>> fetchPublicationContent(String publicationId) async {
     print('📖 Fetching content for publication: $publicationId');
+    print('🔍 === DEBUGGING PUBLICATION ID ===');
+    print('📦 Received publicationId parameter: "$publicationId"');
+    print('📦 Parameter type: ${publicationId.runtimeType}');
+    print('📦 Parameter length: ${publicationId.length}');
+    print('📦 Parameter trimmed: "${publicationId.trim()}"');
+    print(
+        '🔧 Debug mode: ${USE_LOCAL_SERVER ? "LOCAL (10.0.2.2:44342)" : "PRODUCTION (nye.kompetansebiblioteket.no)"}');
 
-    // Use production domain for content API
-    final urls = [
-      'https://nye.kompetansebiblioteket.no/umbraco/api/AppApi/GetPublicationsByPublicationId?publicationId=$publicationId',
-      'https://nye.kompetansebiblioteket.no/umbraco/api/AppApi/GetPublicationsByPublicationId?publicationId=$publicationId',
-    ];
+    // Use production or local domain based on flag
+    final urls = USE_LOCAL_SERVER
+        ? [
+            'https://10.0.2.2:44342/umbraco/api/AppApi/GetPublicationsByPublicationIdExport?publicationId=$publicationId',
+          ]
+        : [
+            'https://nye.kompetansebiblioteket.no/umbraco/api/AppApi/GetPublicationsByPublicationIdExport?publicationId=$publicationId',
+          ];
     for (String url in urls) {
       try {
         print('🌐 Trying content URL: $url');
@@ -75,13 +97,52 @@ class NewPublicationService {
         if (response.statusCode == 200) {
           final responseBody = await response.transform(utf8.decoder).join();
 
-          final List<dynamic> jsonList = jsonDecode(responseBody);
+          final jsonData = jsonDecode(responseBody);
+
+          // Check if response is a Map (object) or List (array)
+          List<dynamic> jsonList;
+          if (jsonData is Map<String, dynamic>) {
+            // Response is an object - extract the chapters array
+            print('📦 Response is an object (Map)');
+            if (jsonData.containsKey('chapters')) {
+              jsonList = jsonData['chapters'] as List<dynamic>;
+              print('✅ Found chapters array with ${jsonList.length} items');
+            } else {
+              print('❌ No "chapters" key found in response');
+              print('📋 Available keys: ${jsonData.keys.join(", ")}');
+              throw Exception('Response does not contain "chapters" array');
+            }
+          } else if (jsonData is List<dynamic>) {
+            // Response is already an array
+            print('📦 Response is an array (List)');
+            jsonList = jsonData;
+          } else {
+            throw Exception(
+                'Unexpected response format: ${jsonData.runtimeType}');
+          }
 
           final chapters =
               jsonList.map((json) => Chapter.fromJson(json)).toList();
 
           print(
               '📖 Successfully fetched ${chapters.length} chapters from $url');
+
+          // Debug: Print chapter and subchapter counts
+          print('🔍 === CHAPTER DETAILS ===');
+          for (int i = 0; i < chapters.length; i++) {
+            final chapter = chapters[i];
+            print('📖 Chapter ${i + 1}: "${chapter.title}"');
+            print('   - Subchapters: ${chapter.subchapters.length}');
+            if (chapter.subchapters.isNotEmpty) {
+              for (int j = 0; j < chapter.subchapters.length.clamp(0, 3); j++) {
+                print('      • ${chapter.subchapters[j].title}');
+              }
+              if (chapter.subchapters.length > 3) {
+                print('      ... and ${chapter.subchapters.length - 3} more');
+              }
+            }
+          }
+
           return chapters;
         } else {
           print('❌ Content API error from $url: ${response.statusCode}');
@@ -112,6 +173,8 @@ class NewPublicationService {
       await file.writeAsString(jsonString);
 
       print('💾 Publication content saved: $path');
+      print('📊 Saved ${chapters.length} chapters');
+      print('📂 Full path for verification: $path');
     } catch (e) {
       print('❌ Error saving publication content: $e');
       throw Exception('Failed to save publication content: $e');
@@ -137,6 +200,23 @@ class NewPublicationService {
 
       print(
           '📖 Loaded ${chapters.length} chapters from local file for publication: $publicationId');
+
+      // Debug: Print loaded chapter and subchapter counts
+      print('🔍 === LOADED CHAPTER DETAILS ===');
+      for (int i = 0; i < chapters.length; i++) {
+        final chapter = chapters[i];
+        print('📖 Chapter ${i + 1}: "${chapter.title}"');
+        print('   - Subchapters: ${chapter.subchapters.length}');
+        if (chapter.subchapters.isNotEmpty) {
+          for (int j = 0; j < chapter.subchapters.length.clamp(0, 3); j++) {
+            print('      • ${chapter.subchapters[j].title}');
+          }
+          if (chapter.subchapters.length > 3) {
+            print('      ... and ${chapter.subchapters.length - 3} more');
+          }
+        }
+      }
+
       return chapters;
     } catch (e) {
       print('❌ Error loading publication content: $e');
@@ -237,55 +317,34 @@ class NewPublicationService {
 
       await savePublicationContent(publicationId, chapters);
 
-      onProgress(0.6, '🖼️ Starter bildnedlasting...');
+      onProgress(0.6, '🖼️ Starter mediefil-nedlasting...');
       await Future.delayed(
           const Duration(milliseconds: 500)); // Longer delay to see this stage
 
-      // Check for cancellation before starting image download
+      // Check for cancellation before starting media download
       if (isCancelled?.call() == true) {
-        print('🛑 Download cancelled by user before image download');
+        print('🛑 Download cancelled by user before media download');
         // Delete saved content before throwing exception
         await _cleanupPartialDownload(publicationId);
         throw Exception('Download cancelled by user');
       }
 
-      // Download images for offline use
+      // Download all media (images and documents) for offline use
       await downloadImagesForPublication(
         publicationId,
         isCancelled: isCancelled,
-        onProgress: (double imageProgress, String imageStatus) {
-          // Map image progress from 60% to 85% of total progress
-          final totalProgress = 0.6 + (imageProgress * 0.25);
-          final displayStatus = '🖼️ $imageStatus';
+        onProgress: (double mediaProgress, String mediaStatus) {
+          // Map media progress from 60% to 95% of total progress
+          final totalProgress = 0.6 + (mediaProgress * 0.35);
+          final displayStatus = '🖼️ $mediaStatus';
           onProgress(totalProgress, displayStatus);
           print(
-              '🖼️ Image progress: ${(totalProgress * 100).toInt()}% - $displayStatus');
+              '🖼️ Media progress: ${(totalProgress * 100).toInt()}% - $displayStatus');
         },
       );
 
-      // Check for cancellation before starting document download
-      if (isCancelled?.call() == true) {
-        print('🛑 Download cancelled by user before document download');
-        await _cleanupPartialDownload(publicationId);
-        throw Exception('Download cancelled by user');
-      }
-
-      onProgress(0.85, '📄 Starter dokumentnedlasting...');
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      // Download documents (PDF, XLS, etc.) for offline use
-      await downloadDocumentsForPublication(
-        publicationId,
-        isCancelled: isCancelled,
-        onProgress: (double docProgress, String docStatus) {
-          // Map document progress from 85% to 95% of total progress
-          final totalProgress = 0.85 + (docProgress * 0.10);
-          final displayStatus = '📄 $docStatus';
-          onProgress(totalProgress, displayStatus);
-          print(
-              '📄 Document progress: ${(totalProgress * 100).toInt()}% - $displayStatus');
-        },
-      );
+      // Note: Documents are now downloaded together with images from GetPublicationsMediaByPublicationIdExport
+      // No need for separate downloadDocumentsForPublication call
 
       onProgress(1.0, '✅ Nedlasting fullført!');
 
@@ -334,7 +393,15 @@ class NewPublicationService {
         }
       }
 
-      print('✅ Cleanup completed: Deleted JSON and $deletedImages images');
+      // Delete media directory and all its contents
+      final mediaDir = Directory('${directory.path}/${publicationId}_media');
+      if (await mediaDir.exists()) {
+        await mediaDir.delete(recursive: true);
+        print('🗑️ Deleted media directory: ${mediaDir.path}');
+      }
+
+      print(
+          '✅ Cleanup completed: Deleted JSON, $deletedImages images, and media folder');
     } catch (e) {
       print('❌ Error during cleanup: $e');
       // Don't throw - cleanup is best effort
@@ -350,147 +417,246 @@ class NewPublicationService {
     try {
       print('🖼️ === STARTING IMAGE DOWNLOAD ===');
       print('📦 Publication ID: $publicationId');
-      print('🖼️ Starting image download for publication: $publicationId');
+      print(
+          '� Debug mode: ${USE_LOCAL_SERVER ? "LOCAL (10.0.2.2:44342)" : "PRODUCTION (nye.kompetansebiblioteket.no)"}');
 
-      onProgress(0.0, 'Sjekker lagret innhold...');
+      onProgress(0.0, 'Kobler til media API...');
       await Future.delayed(const Duration(milliseconds: 300));
 
-      // Load publication content using our model-based approach
-      onProgress(0.1, 'Analyserer bilder i innhold...');
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      print('🔍 === LOADING PUBLICATION CONTENT FOR IMAGE ANALYSIS ===');
-
-      // Use our existing method to load chapters
-      final chapters = await loadPublicationContent(publicationId);
-      if (chapters == null) {
-        throw Exception(
-            'Kunne ikke laste publikasjonsinnhold for bildeanalyse.');
+      // Check for cancellation
+      if (isCancelled?.call() == true) {
+        print('🛑 Download cancelled by user');
+        throw Exception('Download cancelled by user');
       }
 
-      print('📊 Loaded ${chapters.length} chapters from saved content');
+      // Fetch media list from new API endpoint
+      onProgress(0.1, 'Henter medialiste fra server...');
+      print('📞 Calling GetPublicationsMediaByPublicationIdExport API...');
 
-      // Extract all image URLs from the content using the correct structure
-      final imageUrls = <String>{};
-      int chapterCount = 0;
+      final urls = USE_LOCAL_SERVER
+          ? [
+              'https://10.0.2.2:44342/umbraco/api/AppApi/GetPublicationsMediaByPublicationIdExport?publicationId=$publicationId',
+            ]
+          : [
+              'https://nye.kompetansebiblioteket.no/umbraco/api/AppApi/GetPublicationsMediaByPublicationIdExport?publicationId=$publicationId',
+            ];
 
-      for (final chapter in chapters) {
-        chapterCount++;
-        print('📖 Processing chapter $chapterCount: ${chapter.title}');
-        print(
-            '📄 Found ${chapter.subchapters.length} subchapters in this chapter');
+      Map<String, dynamic>? mediaData;
+      for (String url in urls) {
+        try {
+          print('🌐 Trying media API URL: $url');
+          final response = await ApiClient.instance.get(url);
 
-        for (int i = 0; i < chapter.subchapters.length; i++) {
-          final subchapter = chapter.subchapters[i];
-          print('   📝 Subchapter ${i + 1}: ${subchapter.title}');
-
-          final content = subchapter.text;
-          final contentLength = content.length;
-          print('   📜 Text content length: $contentLength chars');
-
-          final urls = _extractImageUrlsFromHtml(content);
-          if (urls.isNotEmpty) {
-            print('   🖼️ Found ${urls.length} images in this subchapter:');
-            for (final url in urls) {
-              print('      📷 $url');
-            }
+          if (response.statusCode == 200) {
+            final responseBody = await response.transform(utf8.decoder).join();
+            mediaData = jsonDecode(responseBody) as Map<String, dynamic>;
+            print('✅ Successfully fetched media data from $url');
+            break;
+          } else if (response.statusCode == 404) {
+            print(
+                '⚠️ No media data found (404) - publication may have no media files');
+            // Create empty media data structure
+            mediaData = {
+              'publicationId': publicationId,
+              'mediaCount': 0,
+              'mediaFiles': [],
+              'generatedDate': DateTime.now().toIso8601String(),
+            };
+            break;
           } else {
-            print('   ℹ️ No images found in this subchapter');
+            print('❌ Media API error from $url: ${response.statusCode}');
           }
-          imageUrls.addAll(urls);
+        } catch (e) {
+          print('❌ Error fetching media from $url: $e');
+          // If it's a JSON decode error or empty response, treat as no media
+          if (e.toString().contains('Unexpected end') ||
+              e.toString().contains('FormatException')) {
+            print('⚠️ Empty or invalid response - treating as no media files');
+            mediaData = {
+              'publicationId': publicationId,
+              'mediaCount': 0,
+              'mediaFiles': [],
+              'generatedDate': DateTime.now().toIso8601String(),
+            };
+            break;
+          }
+          continue;
         }
       }
 
-      final totalImages = imageUrls.length;
-      print('� === IMAGE EXTRACTION SUMMARY ===');
-      print('🖼️ Total unique images found: $totalImages');
-      if (totalImages > 0) {
-        print('📷 Image URLs found:');
-        final urlsList = imageUrls.toList();
-        for (int i = 0; i < urlsList.length; i++) {
-          print('   ${i + 1}. ${urlsList[i]}');
-        }
+      if (mediaData == null) {
+        print('⚠️ Could not fetch media data - treating as no media files');
+        // Don't throw exception, just treat as empty media
+        mediaData = {
+          'publicationId': publicationId,
+          'mediaCount': 0,
+          'mediaFiles': [],
+          'generatedDate': DateTime.now().toIso8601String(),
+        };
       }
-      print('�🖼️ Found $totalImages images to download');
 
-      if (totalImages == 0) {
-        print('⚠️ === NO IMAGES FOUND ===');
-        print('❓ This could be because:');
-        print('   1. The content has no image tags');
-        print('   2. The JSON structure is different than expected');
-        print('   3. Images are embedded differently in the HTML');
-        onProgress(1.0, 'Ingen bilder funnet i innholdet');
-        await Future.delayed(const Duration(milliseconds: 500));
+      // Parse media response
+      final mediaCount = mediaData['mediaCount'] as int? ?? 0;
+      final mediaFiles = mediaData['mediaFiles'] as List<dynamic>? ?? [];
+
+      print('📊 === MEDIA API RESPONSE ===');
+      print('📦 Publication ID: ${mediaData['publicationId']}');
+      print('📅 Generated Date: ${mediaData['generatedDate']}');
+      print('🖼️ Total media files: $mediaCount');
+
+      if (mediaFiles.isEmpty) {
+        print('⚠️ No media files found for this publication');
+        onProgress(0.9, 'Ingen mediefiler funnet');
+        await Future.delayed(const Duration(milliseconds: 300));
+        onProgress(1.0, 'Mediefiler fullført (0/0)');
+        await Future.delayed(const Duration(milliseconds: 200));
+        print('✅ Media download completed: 0 files (none available)');
         return;
       }
 
-      onProgress(0.2, 'Fant $totalImages bilder å laste ned');
+      onProgress(0.2, 'Fant $mediaCount mediefiler å laste ned');
       await Future.delayed(const Duration(milliseconds: 500));
 
+      // Create media directory for this publication
+      final directory = await getApplicationDocumentsDirectory();
+      final mediaDir = Directory('${directory.path}/${publicationId}_media');
+      if (!await mediaDir.exists()) {
+        await mediaDir.create(recursive: true);
+        print('📁 Created media directory: ${mediaDir.path}');
+      }
+
       int downloadedCount = 0;
-      final urlsList = imageUrls.toList();
+      final totalFiles = mediaFiles.length;
 
-      print('🚀 === STARTING INDIVIDUAL IMAGE DOWNLOADS ===');
+      print('🚀 === STARTING INDIVIDUAL MEDIA DOWNLOADS ===');
 
-      for (int i = 0; i < urlsList.length; i++) {
-        final imageUrl = urlsList[i];
-        final progress = 0.2 + (i / urlsList.length) * 0.7;
+      for (int i = 0; i < totalFiles; i++) {
+        final mediaFile = mediaFiles[i] as Map<String, dynamic>;
+        final url = mediaFile['url'] as String;
+        final fileName = mediaFile['fileName'] as String;
 
-        print('📥 === DOWNLOADING IMAGE ${i + 1}/$totalImages ===');
-        print('🔗 URL: $imageUrl');
-        onProgress(progress, 'Laster ned bilde ${i + 1} av $totalImages');
+        final progress = 0.2 + (i / totalFiles) * 0.7;
 
-        // Check for cancellation before each image download
+        print('📥 === DOWNLOADING MEDIA ${i + 1}/$totalFiles ===');
+        print('🔗 URL: $url');
+        print('📁 File name: $fileName');
+        onProgress(progress, 'Laster ned fil ${i + 1} av $totalFiles');
+
+        // Check for cancellation before each download
         if (isCancelled?.call() == true) {
-          print('🛑 Image download cancelled by user');
+          print('🛑 Media download cancelled by user');
           throw Exception('Download cancelled by user');
         }
 
         try {
-          await _downloadAndCacheImageAsFile(
-              imageUrl, publicationId, i, isCancelled);
-          downloadedCount++;
-          print('✅ Successfully downloaded image ${i + 1}');
+          // Fix localhost URLs for Android emulator if in local mode
+          String downloadUrl = url;
+          if (USE_LOCAL_SERVER) {
+            downloadUrl = url.replaceAll('localhost:44342', '10.0.2.2:44342');
+          }
 
-          // Show progress for each downloaded image
-          final downloadProgress = 0.2 + ((i + 1) / urlsList.length) * 0.7;
+          await _downloadAndCacheMediaFile(
+              downloadUrl, mediaDir.path, fileName, isCancelled);
+          downloadedCount++;
+          print('✅ Successfully downloaded file ${i + 1}: $fileName');
+
+          // Show progress for each downloaded file
+          final downloadProgress = 0.2 + ((i + 1) / totalFiles) * 0.7;
           onProgress(
-              downloadProgress, 'Lastet ned bilde ${i + 1} av $totalImages');
+              downloadProgress, 'Lastet ned fil ${i + 1} av $totalFiles');
         } catch (e) {
-          print('❌ === IMAGE DOWNLOAD FAILED ===');
-          print('🔗 URL: $imageUrl');
+          print('❌ === MEDIA DOWNLOAD FAILED ===');
+          print('🔗 URL: $url');
+          print('📁 File: $fileName');
           print('💥 Error: $e');
           print('🔍 Error type: ${e.runtimeType}');
-          onProgress(progress, 'Feil med bilde ${i + 1} - fortsetter...');
-          // Continue with next image instead of failing completely
+          onProgress(progress, 'Feil med fil ${i + 1} - fortsetter...');
+          // Continue with next file instead of failing completely
         }
 
         // Delay to make progress visible
         await Future.delayed(const Duration(milliseconds: 200));
       }
 
-      print('📊 === IMAGE DOWNLOAD SUMMARY ===');
-      print('✅ Successfully downloaded: $downloadedCount images');
-      print('❌ Failed downloads: ${totalImages - downloadedCount} images');
+      print('📊 === MEDIA DOWNLOAD SUMMARY ===');
+      print('✅ Successfully downloaded: $downloadedCount files');
+      print('❌ Failed downloads: ${totalFiles - downloadedCount} files');
 
-      // Update JSON file to use local file references
-      if (downloadedCount > 0) {
-        print('🔄 Updating JSON file with local image paths...');
-        onProgress(0.95, 'Oppdaterer bildelenker i JSON...');
-        await _updateJsonWithLocalImagePaths(publicationId, urlsList);
-      }
-
-      onProgress(1.0, 'Bilder fullført ($downloadedCount/$totalImages)');
-      print('✅ Image download completed: $downloadedCount/$totalImages images');
+      onProgress(1.0, 'Mediefiler fullført ($downloadedCount/$totalFiles)');
+      print('✅ Media download completed: $downloadedCount/$totalFiles files');
       await Future.delayed(const Duration(milliseconds: 300));
     } catch (e) {
-      print('❌ Error downloading images: $e');
-      throw Exception('Feil ved nedlasting av bilder: $e');
+      print('❌ Error downloading media: $e');
+      throw Exception('Feil ved nedlasting av mediefiler: $e');
     }
   }
 
+  // Download and cache a single media file to the publication's media directory
+  Future<void> _downloadAndCacheMediaFile(
+      String fileUrl, String mediaDirPath, String fileName,
+      [Function()? isCancelled]) async {
+    try {
+      print('� === DOWNLOADING MEDIA FILE ===');
+      print('🔗 URL: $fileUrl');
+      print('📁 File name: $fileName');
+      print('📂 Target directory: $mediaDirPath');
+
+      // Check for cancellation before download
+      if (isCancelled?.call() == true) {
+        print('🛑 Media download cancelled before HTTP request');
+        throw Exception('Download cancelled by user');
+      }
+
+      print('📞 Making HTTP request...');
+      final response = await ApiClient.instance.get(fileUrl);
+
+      print('📊 Response status: ${response.statusCode}');
+      print('📏 Content length: ${response.contentLength}');
+
+      if (response.statusCode == 200) {
+        print('✅ HTTP response OK - reading bytes...');
+
+        // Check for cancellation before reading response body
+        if (isCancelled?.call() == true) {
+          print('🛑 Media download cancelled before reading response');
+          throw Exception('Download cancelled by user');
+        }
+
+        final bytes = await response.expand((chunk) => chunk).toList();
+
+        print('📦 Downloaded ${bytes.length} bytes');
+
+        if (bytes.isNotEmpty) {
+          final file = File('$mediaDirPath/$fileName');
+
+          print('💾 Saving to: ${file.path}');
+          await file.writeAsBytes(bytes);
+
+          // Verify file was written
+          final savedFile = File(file.path);
+          final fileExists = await savedFile.exists();
+          final fileSize = fileExists ? await savedFile.length() : 0;
+
+          print('✅ === MEDIA FILE SAVE SUCCESSFUL ===');
+          print('📁 File: $fileName');
+          print('📊 Size: ${bytes.length} bytes');
+          print('✓ File exists: $fileExists');
+          print('✓ File size on disk: $fileSize bytes');
+        } else {
+          throw Exception('Tomt filinnhold');
+        }
+      } else {
+        throw Exception('HTTP error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ Error downloading media file $fileName: $e');
+      rethrow;
+    }
+  }
+
+  // DEPRECATED: No longer used - media files now stored in <publicationId>_media directory
   // Update JSON file to use local file paths instead of network URLs
-  Future<void> _updateJsonWithLocalImagePaths(
+  /* Future<void> _updateJsonWithLocalImagePaths(
       String publicationId, List<String> imageUrls) async {
     try {
       print('🔄 Updating JSON file with local image paths...');
@@ -632,10 +798,11 @@ class NewPublicationService {
     } catch (e) {
       print('❌ Error updating JSON with local image paths: $e');
     }
-  }
+  } */
 
+  // DEPRECATED: No longer used - media files obtained from GetPublicationsMediaByPublicationIdExport API
   // Extract image URLs from HTML content
-  List<String> _extractImageUrlsFromHtml(String htmlContent) {
+  /* List<String> _extractImageUrlsFromHtml(String htmlContent) {
     final imageUrls = <String>[];
     final imgRegex = RegExp(
         r'<img[^>]+src=["' "'" r']([^"' "'" r'>]+)["' "'" r'][^>]*>',
@@ -685,10 +852,11 @@ class NewPublicationService {
     print('📊 === EXTRACTION SUMMARY ===');
     print('🖼️ Total extracted images: ${imageUrls.length}');
     return imageUrls;
-  }
+  } */
 
+  // DEPRECATED: No longer used - documents obtained from GetPublicationsMediaByPublicationIdExport API
   // Extract document URLs (PDF, XLS, etc.) from HTML content
-  List<String> _extractDocumentUrlsFromHtml(String htmlContent) {
+  /* List<String> _extractDocumentUrlsFromHtml(String htmlContent) {
     final documentUrls = <String>[];
 
     // Match <a> tags with href pointing to documents
@@ -735,10 +903,11 @@ class NewPublicationService {
     print('📊 === DOCUMENT EXTRACTION SUMMARY ===');
     print('📄 Total extracted documents: ${documentUrls.length}');
     return documentUrls;
-  }
+  } */
 
+  // DEPRECATED: Documents now downloaded together with images via GetPublicationsMediaByPublicationIdExport
   // Download documents for a publication
-  Future<void> downloadDocumentsForPublication(
+  /* Future<void> downloadDocumentsForPublication(
     String publicationId, {
     required Function(double progress, String status) onProgress,
     Function()? isCancelled,
@@ -844,10 +1013,11 @@ class NewPublicationService {
       print('❌ Error downloading documents: $e');
       throw Exception('Feil ved nedlasting av dokumenter: $e');
     }
-  }
+  } */
 
+  // DEPRECATED: Documents now handled by _downloadAndCacheMediaFile
   // Download and cache a single document as a file
-  Future<void> _downloadAndCacheDocumentAsFile(
+  /* Future<void> _downloadAndCacheDocumentAsFile(
       String documentUrl, String publicationId, int index,
       [Function()? isCancelled]) async {
     try {
@@ -930,10 +1100,11 @@ class NewPublicationService {
       print('❌ Error downloading document $index: $e');
       rethrow;
     }
-  }
+  } */
 
+  // DEPRECATED: JSON updates now handled differently with media directory
   // Update JSON file to use local document paths instead of network URLs
-  Future<void> _updateJsonWithLocalDocumentPaths(
+  /* Future<void> _updateJsonWithLocalDocumentPaths(
       String publicationId, List<String> documentUrls) async {
     try {
       print('🔄 Updating JSON file with local document paths...');
@@ -1020,10 +1191,11 @@ class NewPublicationService {
     } catch (e) {
       print('❌ Error updating JSON with document paths: $e');
     }
-  }
+  } */
 
+  // DEPRECATED: Not used with new media directory approach
   // Get cached document file for offline viewing
-  Future<File?> getCachedDocumentFile(
+  /* Future<File?> getCachedDocumentFile(
       String publicationId, int index, String extension) async {
     try {
       final filename = 'content_doc_${publicationId}_$index.$extension';
@@ -1038,10 +1210,11 @@ class NewPublicationService {
     }
 
     return null;
-  }
+  } */
 
+  // DEPRECATED: Images now handled by _downloadAndCacheMediaFile
   // Download and cache a single image as a file (like old version)
-  Future<void> _downloadAndCacheImageAsFile(
+  /* Future<void> _downloadAndCacheImageAsFile(
       String imageUrl, String publicationId, int index,
       [Function()? isCancelled]) async {
     try {
@@ -1123,7 +1296,7 @@ class NewPublicationService {
       print('❌ Error downloading image $index: $e');
       rethrow;
     }
-  }
+  } */
 
   // Get all locally downloaded publication IDs
   Future<List<String>> getDownloadedPublicationIds() async {
@@ -1157,12 +1330,20 @@ class NewPublicationService {
   Future<void> deletePublicationContent(String publicationId) async {
     try {
       final directory = await getApplicationDocumentsDirectory();
+
+      // Delete JSON file
       final path = '${directory.path}/publikasjon_$publicationId.json';
       final file = File(path);
-
       if (await file.exists()) {
         await file.delete();
         print('🗑️ Deleted local content for publication: $publicationId');
+      }
+
+      // Delete media directory
+      final mediaDir = Directory('${directory.path}/${publicationId}_media');
+      if (await mediaDir.exists()) {
+        await mediaDir.delete(recursive: true);
+        print('🗑️ Deleted media directory for publication: $publicationId');
       }
     } catch (e) {
       print('❌ Error deleting publication content: $e');
@@ -1204,22 +1385,72 @@ class NewPublicationService {
   // Check if images are downloaded for a publication
   Future<bool> areImagesDownloaded(String publicationId) async {
     try {
-      final filename = 'publikasjon_$publicationId.json';
       final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/$filename');
+      final mediaDir = Directory('${directory.path}/${publicationId}_media');
 
-      if (!await file.exists()) {
+      // Check if media directory exists and has files
+      if (!await mediaDir.exists()) {
         return false;
       }
 
-      final jsonString = await file.readAsString();
-      final content = jsonString;
+      final files = await mediaDir.list().toList();
+      final hasFiles = files.isNotEmpty;
 
-      // Check if content contains cached:// references
-      return content.contains('cached://');
+      print('📂 Media directory exists: ${mediaDir.path}');
+      print('📊 Files in media directory: ${files.length}');
+
+      return hasFiles;
     } catch (e) {
-      print('❌ Error checking images: $e');
+      print('❌ Error checking media files: $e');
       return false;
+    }
+  }
+
+  // Get cached media file from publication's media directory
+  Future<File?> getCachedMediaFile(
+      String publicationId, String fileName) async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final mediaDir = Directory('${directory.path}/${publicationId}_media');
+      final file = File('${mediaDir.path}/$fileName');
+
+      if (await file.exists()) {
+        print('✅ Found cached media file: ${file.path}');
+        return file;
+      } else {
+        print('❌ Media file not found: $fileName');
+        return null;
+      }
+    } catch (e) {
+      print('❌ Error getting cached media file: $e');
+      return null;
+    }
+  }
+
+  // Get local file path for a media URL (used by WebView to load local files)
+  Future<String?> getLocalPathForMediaUrl(
+      String publicationId, String mediaUrl) async {
+    try {
+      // Extract filename from URL
+      final uri = Uri.parse(mediaUrl);
+      final pathSegments = uri.pathSegments;
+      final fileName = pathSegments.isNotEmpty ? pathSegments.last : '';
+
+      if (fileName.isEmpty) {
+        return null;
+      }
+
+      // Get local file
+      final localFile = await getCachedMediaFile(publicationId, fileName);
+      if (localFile != null && await localFile.exists()) {
+        // Return file:// URL for WebView
+        return 'file://${localFile.path}';
+      }
+
+      return null;
+    } catch (e) {
+      print('❌ Error getting local path for media URL: $e');
+      return null;
     }
   }
 

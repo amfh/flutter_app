@@ -14,6 +14,20 @@ class NewSubchapterListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Debug: Print subchapter count
+    print('🔍 === SUBCHAPTER LIST SCREEN ===');
+    print('📖 Chapter: "${chapter.title}"');
+    print('📊 Subchapters count: ${chapter.subchapters.length}');
+    if (chapter.subchapters.isNotEmpty) {
+      print('📋 Subchapters:');
+      for (int i = 0; i < chapter.subchapters.length.clamp(0, 5); i++) {
+        print('   ${i + 1}. ${chapter.subchapters[i].title}');
+      }
+      if (chapter.subchapters.length > 5) {
+        print('   ... and ${chapter.subchapters.length - 5} more');
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(chapter.title),

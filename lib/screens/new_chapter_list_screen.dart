@@ -55,6 +55,17 @@ class _NewChapterListScreenState extends State<NewChapterListScreen> {
 
       print(
           '📖 Loaded ${_chapters.length} chapters for ${widget.publication.name}');
+
+      // Debug: Print chapter details
+      print('🔍 === CHAPTER DETAILS IN LIST SCREEN ===');
+      for (int i = 0; i < _chapters.length; i++) {
+        final chapter = _chapters[i];
+        print('Chapter ${i + 1}:');
+        print('  Title: "${chapter.title}"');
+        print('  Subtitle: "${chapter.subtitle}"');
+        print('  Number: "${chapter.number}"');
+        print('  Subchapters: ${chapter.subchapters.length}');
+      }
     } catch (e) {
       print('❌ Error loading chapters: $e');
       setState(() {

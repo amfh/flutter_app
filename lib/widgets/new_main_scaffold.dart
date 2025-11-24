@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../screens/new_publication_list_screen.dart';
 import '../screens/new_my_page_screen.dart';
 import '../screens/new_about_screen.dart';
+import '../screens/new_bookmarks_screen.dart';
 
 class NewMainScaffold extends StatefulWidget {
   final Widget child;
@@ -83,6 +84,13 @@ class _NewMainScaffoldState extends State<NewMainScaffold> {
           ),
           _buildDrawerItem(
             context,
+            icon: Icons.star,
+            title: 'Bokmerker',
+            route: '/bookmarks',
+            onTap: () => _navigateToBookmarks(context),
+          ),
+          _buildDrawerItem(
+            context,
             icon: Icons.person,
             title: 'Min side',
             route: '/my-page',
@@ -146,6 +154,17 @@ class _NewMainScaffoldState extends State<NewMainScaffold> {
         context,
         MaterialPageRoute(
           builder: (context) => const NewMyPageScreen(),
+        ),
+      );
+    }
+  }
+
+  void _navigateToBookmarks(BuildContext context) {
+    if (widget.currentRoute != '/bookmarks') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const NewBookmarksScreen(),
         ),
       );
     }

@@ -98,11 +98,11 @@ class Chapter {
 
   factory Chapter.fromJson(Map<String, dynamic> json) {
     return Chapter(
-      title: json['Title'] ?? '',
-      subtitle: json['Subtitle'],
-      number: json['Number'],
-      abstract: json['Abstract'],
-      subchapters: (json['Subchapters'] as List<dynamic>?)
+      title: json['title'] ?? '',
+      subtitle: json['subtitle'],
+      number: json['number'],
+      abstract: json['abstract'],
+      subchapters: (json['subchapters'] as List<dynamic>?)
               ?.map((subchapter) => Subchapter.fromJson(subchapter))
               .toList() ??
           [],
@@ -111,11 +111,11 @@ class Chapter {
 
   Map<String, dynamic> toJson() {
     return {
-      'Title': title,
-      'Subtitle': subtitle,
-      'Number': number,
-      'Abstract': abstract,
-      'Subchapters': subchapters.map((s) => s.toJson()).toList(),
+      'title': title,
+      'subtitle': subtitle,
+      'number': number,
+      'abstract': abstract,
+      'subchapters': subchapters.map((s) => s.toJson()).toList(),
     };
   }
 }
@@ -133,17 +133,17 @@ class Subchapter {
 
   factory Subchapter.fromJson(Map<String, dynamic> json) {
     return Subchapter(
-      title: json['Title'] ?? '',
-      text: json['Text'] ?? '',
-      number: json['Number'],
+      title: json['title'] ?? '',
+      text: json['text'] ?? '',
+      number: json['number'],
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'Title': title,
-      'Text': text,
-      'Number': number,
+      'title': title,
+      'text': text,
+      'number': number,
     };
   }
 }

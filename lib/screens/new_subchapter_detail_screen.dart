@@ -5,8 +5,12 @@ import 'package:flutter_html/flutter_html.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:html_unescape/html_unescape.dart';
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/new_publication.dart';
+import '../models/user_data.dart';
 import '../services/new_publication_service.dart';
+import '../services/new_user_data_service.dart';
 import '../services/local_storage_service.dart';
 
 // Helper class to store table cell data with colspan/rowspan
@@ -50,11 +54,13 @@ class NewSubchapterDetailScreen extends StatefulWidget {
 class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
   String? _updatedContent;
   bool _isLoading = true;
+  bool _isBookmarked = false;
 
   @override
   void initState() {
     super.initState();
     _loadUpdatedContent();
+    _checkIfBookmarked();
   }
 
   Future<void> _loadUpdatedContent() async {
@@ -140,8 +146,12 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.share),
-            onPressed: () => _shareContent(context),
+            icon: Icon(
+              _isBookmarked ? Icons.star : Icons.star_border,
+              color: _isBookmarked ? Colors.yellow : Colors.white,
+            ),
+            onPressed: _toggleBookmark,
+            tooltip: _isBookmarked ? 'Fjern bokmerke' : 'Legg til bokmerke',
           ),
         ],
       ),
@@ -259,7 +269,7 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
 
     // Also check what's in the HTML around images
     final srcPattern =
-        RegExp('src=[\"\']([^\"\']{0,100})[\"\']', caseSensitive: false);
+        RegExp('src=["\']([^"\']{0,100})["\']', caseSensitive: false);
     final srcMatches = srcPattern.allMatches(htmlContent).toList();
     print('🖼️ Found ${srcMatches.length} src attributes in HTML');
     for (var i = 0; i < srcMatches.length && i < 5; i++) {
@@ -273,21 +283,29 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
 
     // Pattern 1: cached:// URLs (format: cached://publicationId/imageIndex)
     final cachedPattern = RegExp(
-      '<img([^>]*)src=[\"\']cached://([^/]+)/(\\d+)[\"\']([^>]*)>',
+      '<img([^>]*)src=["\']cached://([^/]+)/(\\d+)["\']([^>]*)>',
       caseSensitive: false,
     );
 
     // Pattern 2: file:// URLs (format: file:///path/to/image)
     final filePattern = RegExp(
-      '<img([^>]*)src=[\"\']file://([^\"\']+)[\"\']([^>]*)>',
+      '<img([^>]*)src=["\']file://([^"\']+)["\']([^>]*)>',
+      caseSensitive: false,
+    );
+
+    // Pattern 3: Relative paths (e.g., /media/hvljumra/image.png)
+    final relativePattern = RegExp(
+      '<img([^>]*)src=["\'](/[^"\']+)["\']([^>]*)>',
       caseSensitive: false,
     );
 
     final cachedMatches = cachedPattern.allMatches(htmlContent).toList();
     final fileMatches = filePattern.allMatches(htmlContent).toList();
+    final relativeMatches = relativePattern.allMatches(htmlContent).toList();
 
     print('🖼️ Found ${cachedMatches.length} img tags with cached:// URLs');
     print('🖼️ Found ${fileMatches.length} img tags with file:// URLs');
+    print('🖼️ Found ${relativeMatches.length} img tags with relative paths');
 
     // Process cached:// URLs
     for (final match in cachedMatches) {
@@ -424,11 +442,153 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
       }
     }
 
+    // Process relative paths (e.g., /media/hvljumra/image.png)
+    for (final match in relativeMatches) {
+      final beforeSrc = match.group(1) ?? '';
+      final relativePath = match.group(2) ?? '';
+      final afterSrc = match.group(3) ?? '';
+
+      print('🖼️ ----------------------------------------');
+      print('🖼️ Processing relative path image:');
+      print('🖼️   Relative path: $relativePath');
+
+      try {
+        // Extract filename from path
+        final fileName = relativePath.split('/').last;
+        print('🖼️   Extracted filename: $fileName');
+
+        // Search in media directory
+        final directory = await getApplicationDocumentsDirectory();
+        final mediaDir =
+            Directory('${directory.path}/${widget.publication.id}_media');
+
+        print('🖼️   Looking in media directory: ${mediaDir.path}');
+
+        if (await mediaDir.exists()) {
+          final imageFile = File('${mediaDir.path}/$fileName');
+
+          if (await imageFile.exists()) {
+            final fileSize = await imageFile.length();
+            print('✅   FOUND relative path image: ${imageFile.path}');
+            print('✅   File size: $fileSize bytes');
+
+            final imageBytes = await imageFile.readAsBytes();
+            final base64Image = base64Encode(imageBytes);
+
+            String mimeType = 'image/jpeg';
+            if (imageBytes.length >= 2) {
+              if (imageBytes[0] == 0x89 && imageBytes[1] == 0x50) {
+                mimeType = 'image/png';
+              } else if (imageBytes[0] == 0x47 && imageBytes[1] == 0x49) {
+                mimeType = 'image/gif';
+              } else if (imageBytes[0] == 0xFF && imageBytes[1] == 0xD8) {
+                mimeType = 'image/jpeg';
+              } else if (imageBytes[0] == 0x52 && imageBytes[1] == 0x49) {
+                mimeType = 'image/webp';
+              }
+            }
+
+            print('✅   Detected MIME type: $mimeType');
+
+            final dataUrl = 'data:$mimeType;base64,$base64Image';
+            final originalTag = match.group(0)!;
+            final newTag = '<img${beforeSrc}src="$dataUrl"$afterSrc>';
+            processedHtml = processedHtml.replaceFirst(originalTag, newTag);
+
+            print(
+                '✅   Successfully replaced relative path with base64 data URL');
+            successCount++;
+          } else {
+            print(
+                '❌   Relative path image NOT FOUND: $fileName in ${mediaDir.path}');
+
+            // Try case-insensitive search
+            final allFiles = await mediaDir.list().toList();
+            bool foundCaseInsensitive = false;
+
+            for (final file in allFiles) {
+              if (file is File) {
+                final existingFileName =
+                    file.path.split(Platform.pathSeparator).last;
+                if (existingFileName.toLowerCase() == fileName.toLowerCase()) {
+                  print('✅   Found case-insensitive match: ${file.path}');
+
+                  final imageBytes = await file.readAsBytes();
+                  final base64Image = base64Encode(imageBytes);
+
+                  String mimeType = 'image/jpeg';
+                  if (imageBytes.length >= 2) {
+                    if (imageBytes[0] == 0x89 && imageBytes[1] == 0x50) {
+                      mimeType = 'image/png';
+                    } else if (imageBytes[0] == 0x47 && imageBytes[1] == 0x49) {
+                      mimeType = 'image/gif';
+                    } else if (imageBytes[0] == 0xFF && imageBytes[1] == 0xD8) {
+                      mimeType = 'image/jpeg';
+                    } else if (imageBytes[0] == 0x52 && imageBytes[1] == 0x49) {
+                      mimeType = 'image/webp';
+                    }
+                  }
+
+                  final dataUrl = 'data:$mimeType;base64,$base64Image';
+                  final originalTag = match.group(0)!;
+                  final newTag = '<img${beforeSrc}src="$dataUrl"$afterSrc>';
+                  processedHtml =
+                      processedHtml.replaceFirst(originalTag, newTag);
+
+                  print('✅   Successfully replaced with base64 data URL');
+                  successCount++;
+                  foundCaseInsensitive = true;
+                  break;
+                }
+              }
+            }
+
+            if (!foundCaseInsensitive) {
+              print('❌   No matching file found');
+              failCount++;
+            }
+          }
+        } else {
+          print('❌   Media directory does not exist: ${mediaDir.path}');
+          failCount++;
+        }
+      } catch (e) {
+        print('❌   ERROR processing relative path image:');
+        print('❌   Error: $e');
+        failCount++;
+      }
+    }
+
     print('🖼️ ========================================');
     print('🖼️ HTML PREPARATION COMPLETE');
     print('🖼️ Success: $successCount images');
     print('🖼️ Failed: $failCount images');
     print('🖼️ Processed HTML length: ${processedHtml.length} chars');
+
+    // Fix relative links by converting them to absolute URLs
+    // Pattern: href="/media/..." or href="/something..."
+    print('🔗 Converting relative links to absolute URLs...');
+    final baseUrl = 'https://nye.kompetansebiblioteket.no';
+
+    processedHtml = processedHtml.replaceAllMapped(
+      RegExp(r'href="(/[^"]*)"', caseSensitive: false),
+      (match) {
+        final relativePath = match.group(1) ?? '';
+        final absoluteUrl = '$baseUrl$relativePath';
+        print('🔗   Converting: $relativePath -> $absoluteUrl');
+        return 'href="$absoluteUrl"';
+      },
+    );
+
+    // Debug: Check for links in HTML after conversion
+    final linkPattern = RegExp(r'<a\s+[^>]*href="([^"]*)"[^>]*>(.*?)</a>',
+        caseSensitive: false, dotAll: true);
+    final linkMatches = linkPattern.allMatches(processedHtml);
+    print('🔗 Found ${linkMatches.length} links in HTML after conversion:');
+    for (final match in linkMatches.take(5)) {
+      // Show first 5 links
+      print('🔗   href="${match.group(1)}" text="${match.group(2)?.trim()}"');
+    }
 
     // Debug: Print a sample of processed HTML if images were found
     if (successCount > 0 || failCount > 0) {
@@ -526,12 +686,15 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
             max-width: 100%;
         }
         
+        /* Wrapper for tables to enable horizontal scrolling */
         table {
-            width: 100% !important;
             border-collapse: collapse;
             margin: 16px 0;
+            width: 100% !important;
+            display: block;
+            overflow-x: auto;
             max-width: 100%;
-            table-layout: fixed;
+            border: none !important;
         }
         
         td, th {
@@ -620,22 +783,22 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
         }
         
         /* Blue box wrapper */
-        .BlueTextBoxWrapper {
-            background-color: #E3F2FD;
-            border: 2px solid #0974ba;
+        td.BlueTextBoxWrapper {
+            background-color: #E3F2FD !important;
+            border: 2px solid #0974ba !important;
             border-radius: 8px;
-            padding: 16px;
+            padding: 0 !important;
             margin: 16px 0;
             max-width: 100%;
             box-sizing: border-box;
         }
         
         /* White box wrapper */
-        .WhiteTextBoxWrapper {
-            background-color: white;
-            border: 2px solid #ccc;
+        td.WhiteTextBoxWrapper {
+            background-color: white !important;
+            border: 2px solid #ccc !important;
             border-radius: 8px;
-            padding: 16px;
+            padding: 0 !important;
             margin: 16px 0;
             max-width: 100%;
             box-sizing: border-box;
@@ -662,6 +825,12 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
             word-wrap: break-word;
             overflow-wrap: break-word;
             padding: 0;
+        }
+        
+        /* Add padding to the inner content cell */
+        td.BlueTextBoxWrapperContent,
+        td.WhiteTextBoxWrapperContent {
+            padding: 16px !important;
         }
         
         /* Images */
@@ -732,13 +901,48 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: (NavigationRequest request) {
-            // Handle link clicks
+            print('🔗 Navigation request: ${request.url}');
+            print(
+                '🔍 URL starts with http: ${request.url.startsWith('http://')}');
+            print(
+                '🔍 URL starts with https: ${request.url.startsWith('https://')}');
+
+            // Handle external links and downloadable files
             if (request.url.startsWith('http://') ||
                 request.url.startsWith('https://')) {
-              print('🔗 Opening external link: ${request.url}');
-              _launchUrl(request.url);
+              // Check if this is a downloadable file (PDF, XLS, DOC, etc.)
+              final uri = Uri.parse(request.url);
+              final path = uri.path.toLowerCase();
+              final isDownloadableFile = path.endsWith('.pdf') ||
+                  path.endsWith('.xls') ||
+                  path.endsWith('.xlsx') ||
+                  path.endsWith('.doc') ||
+                  path.endsWith('.docx') ||
+                  path.endsWith('.ppt') ||
+                  path.endsWith('.pptx') ||
+                  path.endsWith('.zip') ||
+                  path.endsWith('.rar');
+
+              if (isDownloadableFile) {
+                print('📄 Detected downloadable file: ${request.url}');
+                // Start async operation to check and open file
+                _handleDownloadableFileAsync(request.url, context);
+                // Always prevent navigation for downloadable files
+                return NavigationDecision.prevent;
+              } else {
+                print('🔗 Opening external link: ${request.url}');
+                _launchUrl(request.url);
+                return NavigationDecision.prevent;
+              }
+            }
+
+            // Handle local file links
+            if (request.url.startsWith('file://')) {
+              print('📄 Opening local file: ${request.url}');
+              _openLocalDocument(request.url, context);
               return NavigationDecision.prevent;
             }
+
             return NavigationDecision.navigate;
           },
           onPageFinished: (String url) {
@@ -754,11 +958,137 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
   }
 
   Future<void> _launchUrl(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      print('❌ Could not launch $url');
+    // Show dialog to let user choose how to open the URL
+    final shouldOpen = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.open_in_browser, color: Color(0xFF0974ba), size: 28),
+            SizedBox(width: 8),
+            Text('Åpne ekstern lenke'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Denne lenken åpner en ekstern nettside:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F9FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFF0974ba).withOpacity(0.3),
+                ),
+              ),
+              child: SelectableText(
+                url,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF0974ba),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Vil du åpne denne lenken i nettleseren?',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[700],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Avbryt'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.open_in_new, size: 18),
+            label: const Text('Åpne'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0974ba),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldOpen == true) {
+      final uri = Uri.parse(url);
+      try {
+        // Try to launch the URL with different modes
+        bool launched = false;
+
+        // First try: externalApplication (opens in browser)
+        try {
+          launched = await launchUrl(
+            uri,
+            mode: LaunchMode.externalApplication,
+          );
+        } catch (e) {
+          print('⚠️ externalApplication failed: $e');
+        }
+
+        // Second try: platformDefault (let OS decide)
+        if (!launched) {
+          try {
+            launched = await launchUrl(
+              uri,
+              mode: LaunchMode.platformDefault,
+            );
+          } catch (e) {
+            print('⚠️ platformDefault failed: $e');
+          }
+        }
+
+        // Third try: externalNonBrowserApplication (for apps like YouTube)
+        if (!launched) {
+          try {
+            launched = await launchUrl(
+              uri,
+              mode: LaunchMode.externalNonBrowserApplication,
+            );
+          } catch (e) {
+            print('⚠️ externalNonBrowserApplication failed: $e');
+          }
+        }
+
+        if (launched) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Åpner lenke i nettleser...'),
+                duration: Duration(seconds: 2),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } else {
+          throw Exception('LaunchUrl returnerte false');
+        }
+      } catch (e) {
+        print('❌ Could not launch $url: $e');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Kunne ikke åpne lenken: $e'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -984,13 +1314,11 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
       dotAll: true,
     ).firstMatch(tableHtml);
 
-    if (contentMatch == null) {
-      contentMatch = RegExp(
-        r'<td[^>]*class="WhiteTextBoxWrapperContent"[^>]*>(.*?)</td>',
-        caseSensitive: false,
-        dotAll: true,
-      ).firstMatch(tableHtml);
-    }
+    contentMatch ??= RegExp(
+      r'<td[^>]*class="WhiteTextBoxWrapperContent"[^>]*>(.*?)</td>',
+      caseSensitive: false,
+      dotAll: true,
+    ).firstMatch(tableHtml);
 
     if (contentMatch != null) {
       final content = contentMatch.group(1) ?? '';
@@ -2234,6 +2562,116 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
     );
   }
 
+  // Handle downloadable file: check local first, then open URL in browser
+  Future<void> _handleDownloadableFileAsync(
+      String url, BuildContext context) async {
+    try {
+      print('📥 Handling downloadable file: $url');
+
+      // Check if we have the file locally
+      final hasLocal = await _checkAndOpenLocalFile(url, context);
+
+      if (hasLocal) {
+        print('✅ Opened local file');
+        return;
+      }
+
+      // No local file - open URL in browser
+      print('🌐 Opening downloadable file in external browser');
+      final fileUri = Uri.parse(url);
+      if (await canLaunchUrl(fileUri)) {
+        final launched = await launchUrl(
+          fileUri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (launched) {
+          print('✅ Successfully launched URL in browser');
+        } else {
+          print('❌ Failed to launch URL');
+        }
+      } else {
+        print('❌ Cannot launch URL: $url');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Kunne ikke åpne filen'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Error handling downloadable file: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Feil ved åpning av fil: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Check if downloadable file exists locally and open it
+  // Returns true if file was found and opened, false otherwise
+  Future<bool> _checkAndOpenLocalFile(String url, BuildContext context) async {
+    try {
+      print('📥 Checking for local file: $url');
+
+      // Extract filename from URL
+      final uri = Uri.parse(url);
+      final pathSegments = uri.pathSegments;
+      final urlFileName = pathSegments.isNotEmpty ? pathSegments.last : '';
+
+      if (urlFileName.isEmpty) {
+        print('❌ Could not extract filename from URL');
+        return false;
+      }
+
+      print('📁 Looking for: $urlFileName');
+
+      // Check if file exists in media directory
+      final directory = await getApplicationDocumentsDirectory();
+      final mediaDir =
+          Directory('${directory.path}/${widget.publication.id}_media');
+
+      if (!await mediaDir.exists()) {
+        print('❌ Media directory does not exist');
+        return false;
+      }
+
+      print('📂 Searching in: ${mediaDir.path}');
+
+      // List all files in media directory
+      final allFiles = await mediaDir.list().toList();
+
+      // Try to find the file
+      for (final file in allFiles) {
+        if (file is File) {
+          final localFileName = file.path.split(Platform.pathSeparator).last;
+
+          // Match if the local filename ends with the URL filename
+          // (handles cases like "qxfis1ds-klimadata.xls" matching "klimadata.xls")
+          if (localFileName.toLowerCase().endsWith(urlFileName.toLowerCase())) {
+            print('✅ Found local file: $localFileName');
+
+            // Open the local file
+            final localFileUrl = 'file://${file.path}';
+            await _openLocalDocument(localFileUrl, context);
+            return true;
+          }
+        }
+      }
+
+      print('❌ File not found in media directory');
+      return false;
+    } catch (e) {
+      print('❌ Error checking for local file: $e');
+      return false;
+    }
+  }
+
   Future<void> _openLocalDocument(String fileUrl, BuildContext context) async {
     try {
       final filePath = fileUrl.substring(7); // Remove 'file://'
@@ -2417,38 +2855,34 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
     try {
       print('📂 Attempting to open file: ${file.path}');
 
-      // Create file URI
-      final uri = Uri.file(file.path);
-      print('🔗 File URI: $uri');
+      // Use open_file package which handles Android FileProvider properly
+      final result = await OpenFile.open(file.path);
 
-      // Try to launch the file
-      final canLaunch = await canLaunchUrl(uri);
-      print('🔍 Can launch: $canLaunch');
+      print('🔍 Open file result: ${result.type} - ${result.message}');
 
-      if (canLaunch) {
-        final launched = await launchUrl(
-          uri,
-          mode: LaunchMode.externalApplication,
-        );
-
-        if (launched) {
-          print('✅ File opened successfully');
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Dokumentet åpnes...'),
-                duration: Duration(seconds: 2),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
-        } else {
-          print('❌ Failed to launch file');
-          throw Exception('Kunne ikke åpne filen');
+      if (result.type == ResultType.done) {
+        print('✅ File opened successfully');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Dokumentet åpnes...'),
+              duration: Duration(seconds: 2),
+              backgroundColor: Colors.green,
+            ),
+          );
         }
-      } else {
-        print('⚠️ Cannot launch file URI');
+      } else if (result.type == ResultType.noAppToOpen) {
+        print('⚠️ No app to open this file type');
         throw Exception('Ingen app tilgjengelig for å åpne denne filtypen');
+      } else if (result.type == ResultType.fileNotFound) {
+        print('❌ File not found');
+        throw Exception('Filen ble ikke funnet');
+      } else if (result.type == ResultType.permissionDenied) {
+        print('❌ Permission denied');
+        throw Exception('Tilgang nektet');
+      } else {
+        print('❌ Unknown error: ${result.message}');
+        throw Exception(result.message);
       }
     } catch (e) {
       print('❌ Error opening file: $e');
@@ -2795,6 +3229,99 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
     );
   }
 
+  Future<void> _checkIfBookmarked() async {
+    try {
+      final userDataService = UserDataService.instance;
+      final userData = await userDataService.loadUserData();
+
+      if (userData != null) {
+        final bookmarkId =
+            '${widget.publication.id}_${widget.chapter.title}_${widget.subchapter.title}';
+        final isBookmarked = userData.bookmarks.any((b) => b.id == bookmarkId);
+
+        if (mounted) {
+          setState(() {
+            _isBookmarked = isBookmarked;
+          });
+        }
+      }
+    } catch (e) {
+      print('❌ Error checking bookmark status: $e');
+    }
+  }
+
+  Future<void> _toggleBookmark() async {
+    try {
+      final userDataService = UserDataService.instance;
+      final userData = await userDataService.loadUserData();
+
+      if (userData == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Kunne ikke laste brukerdata')),
+          );
+        }
+        return;
+      }
+
+      final bookmarkId =
+          '${widget.publication.id}_${widget.chapter.title}_${widget.subchapter.title}';
+      final bookmarks = List<BookmarkedSubchapter>.from(userData.bookmarks);
+
+      if (_isBookmarked) {
+        // Remove bookmark
+        bookmarks.removeWhere((b) => b.id == bookmarkId);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Bokmerke fjernet')),
+          );
+        }
+      } else {
+        // Add bookmark
+        final newBookmark = BookmarkedSubchapter(
+          publicationId: widget.publication.id,
+          publicationName: widget.publication.name,
+          chapterTitle: widget.chapter.title,
+          subchapterTitle: widget.subchapter.title,
+          subchapterNumber: widget.subchapter.number,
+          bookmarkedAt: DateTime.now(),
+        );
+        bookmarks.add(newBookmark);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Bokmerke lagt til')),
+          );
+        }
+      }
+
+      // Save updated user data
+      final updatedUserData = UserData(
+        email: userData.email,
+        subscriptions: userData.subscriptions,
+        availablePublications: userData.availablePublications,
+        bookmarks: bookmarks,
+        lastUpdated: DateTime.now(),
+      );
+
+      await userDataService.saveUserData(updatedUserData);
+
+      if (mounted) {
+        setState(() {
+          _isBookmarked = !_isBookmarked;
+        });
+      }
+    } catch (e) {
+      print('❌ Error toggling bookmark: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Kunne ikke lagre bokmerke')),
+        );
+      }
+    }
+  }
+
   // Build image widget (cached or network)
   Widget _buildImageWidget(String src) {
     print('🖼️ _buildImageWidget called with src: $src');
@@ -2859,7 +3386,77 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
         }
       }
 
-      // If it's already a cached:// URL, extract the index
+      // Extract filename from the URL path
+      // e.g., "/media/hvljumra/styring_og_reg_banner.png" -> "styring_og_reg_banner.png"
+      String fileName = imageUrl;
+      if (imageUrl.contains('/')) {
+        fileName = imageUrl.split('/').last;
+      }
+
+      print('📁 Extracted filename: $fileName');
+
+      // Search for this file in the publication's media directory
+      final directory = await getApplicationDocumentsDirectory();
+      final mediaDir =
+          Directory('${directory.path}/${widget.publication.id}_media');
+
+      print('📂 Looking in media directory: ${mediaDir.path}');
+
+      if (await mediaDir.exists()) {
+        print('✅ Media directory exists');
+
+        // First, list ALL files in the directory for debugging
+        final allFiles = await mediaDir.list().toList();
+        print(
+            '📋 === ALL FILES IN MEDIA DIRECTORY (${allFiles.length} total) ===');
+        for (final file in allFiles) {
+          if (file is File) {
+            final existingFileName =
+                file.path.split(Platform.pathSeparator).last;
+            print('  📄 $existingFileName');
+          }
+        }
+        print('📋 === END OF FILE LIST ===');
+
+        // Look for file with exact filename
+        final imageFile = File('${mediaDir.path}/$fileName');
+
+        if (await imageFile.exists()) {
+          print('✅ Found image file: ${imageFile.path}');
+          return imageFile;
+        } else {
+          print('❌ Image file not found: ${imageFile.path}');
+
+          // Try case-insensitive search
+          print(
+              '🔍 Searching among ${allFiles.length} files for case-insensitive match...');
+          print('🎯 Looking for: "$fileName" (length: ${fileName.length})');
+
+          for (final file in allFiles) {
+            if (file is File) {
+              final existingFileName =
+                  file.path.split(Platform.pathSeparator).last;
+              final existingLower = existingFileName.toLowerCase();
+              final searchLower = fileName.toLowerCase();
+
+              print('  Comparing: "$existingFileName" vs "$fileName"');
+              print('    Lower: "$existingLower" vs "$searchLower"');
+              print('    Match: ${existingLower == searchLower}');
+
+              if (existingLower == searchLower) {
+                print('✅ Found case-insensitive match: ${file.path}');
+                return file;
+              }
+            }
+          }
+
+          print('❌ No matching file found in media directory');
+        }
+      } else {
+        print('❌ Media directory does not exist: ${mediaDir.path}');
+      }
+
+      // Fallback: try old cached:// URL pattern
       if (imageUrl.startsWith('cached://')) {
         final cachedPath = imageUrl.substring(9); // Remove 'cached://'
         final parts = cachedPath.split('_');
@@ -2873,97 +3470,11 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
         }
       }
 
-      // For network URLs, we need to find which cached file corresponds to this URL
-      // This requires loading the publication content and finding the image's position
-      return await _findCachedImageByUrl(imageUrl);
+      return null;
     } catch (e) {
       print('❌ Error finding cached image: $e');
       return null;
     }
-  }
-
-  // Find cached image by matching URL in publication content
-  Future<File?> _findCachedImageByUrl(String targetUrl) async {
-    try {
-      // Get all image URLs from the publication content
-      final allImageUrls = await _getAllImageUrlsFromPublication();
-
-      // Find the index of this URL
-      final index = allImageUrls.indexOf(targetUrl);
-      if (index >= 0) {
-        print('🎯 Found target URL at index $index: $targetUrl');
-        return await NewPublicationService.instance
-            .getCachedImageFile(widget.publication.id, index);
-      }
-
-      print(
-          '❓ URL not found in publication content, trying smart fallback: $targetUrl');
-      return await _smartImageSearch(targetUrl);
-    } catch (e) {
-      print('❌ Error in _findCachedImageByUrl: $e');
-      return null;
-    }
-  }
-
-  // Get all image URLs from publication content
-  Future<List<String>> _getAllImageUrlsFromPublication() async {
-    try {
-      final chapters = await NewPublicationService.instance
-          .loadPublicationContent(widget.publication.id);
-      final imageUrls = <String>[];
-
-      if (chapters != null) {
-        for (final chapter in chapters) {
-          for (final subchapter in chapter.subchapters) {
-            final urls = _extractImageUrlsFromHtml(subchapter.text);
-            imageUrls.addAll(urls);
-          }
-        }
-      }
-
-      return imageUrls;
-    } catch (e) {
-      print('❌ Error getting image URLs: $e');
-      return [];
-    }
-  }
-
-  // Extract image URLs from HTML content
-  List<String> _extractImageUrlsFromHtml(String htmlContent) {
-    final imageUrls = <String>[];
-    final imgPattern = RegExp(r'<img[^>]+src=(["\047])([^"\047]+)\1[^>]*>',
-        caseSensitive: false);
-
-    for (final match in imgPattern.allMatches(htmlContent)) {
-      final src = match.group(2);
-      if (src != null &&
-          src.isNotEmpty &&
-          !src.startsWith('cached://') &&
-          !src.startsWith('file://')) {
-        imageUrls.add(src);
-      } else if (src != null && src.startsWith('file://')) {
-        print('🔍 Found file:// image in content: $src');
-      }
-    }
-
-    return imageUrls;
-  }
-
-  // Smart search for images (similar to old implementation)
-  Future<File?> _smartImageSearch(String targetUrl) async {
-    // Try different indices to find any available image
-    for (int i = 0; i < 50; i++) {
-      // Check up to 50 images
-      final file = await NewPublicationService.instance
-          .getCachedImageFile(widget.publication.id, i);
-      if (file != null) {
-        print('✅ Smart fallback found image at index $i');
-        return file;
-      }
-    }
-
-    print('❌ No images found in smart search');
-    return null;
   }
 
   Widget _buildNetworkImageFallback(String src) {

@@ -80,6 +80,12 @@ class _NewAppWrapperState extends State<NewAppWrapper> {
         final publications = await _publicationService.fetchPublications();
         print('📚 Fetched ${publications.length} publications from API');
 
+        // Debug: Verify publication IDs before creating user data
+        print('🔍 === PUBLICATIONS BEFORE USER DATA CREATION ===');
+        for (final pub in publications) {
+          print('📦 ID: "${pub.id}" | Name: "${pub.name}"');
+        }
+
         // Create user data
         final userData = await _userDataService.createUserData(
           email: userEmail,
@@ -89,6 +95,12 @@ class _NewAppWrapperState extends State<NewAppWrapper> {
 
         print(
             '✅ User data created with ${userData.availablePublications.length} accessible publications');
+
+        // Debug: Verify publication IDs after user data creation
+        print('🔍 === PUBLICATIONS IN USER DATA ===');
+        for (final pub in userData.availablePublications) {
+          print('📦 ID: "${pub.id}" | Name: "${pub.name}"');
+        }
 
         setState(() {
           _isLoading = false;

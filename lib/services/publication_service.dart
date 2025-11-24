@@ -14,6 +14,10 @@ import 'offline_download_service.dart';
 import 'api_client.dart';
 
 class PublicationService {
+  // 🔧 DEBUG FLAG: Sett til true for å bruke lokal utviklingsserver (10.0.2.2:44342)
+  // Sett til false for å bruke produksjonsserver (nye.kompetansebiblioteket.no)
+  static const bool USE_LOCAL_SERVER = false;
+
   // HTTP client that accepts self-signed certificates for localhost
   late HttpClient _httpClient;
 
@@ -463,14 +467,19 @@ class PublicationService {
   // Fetch full publication data from new API endpoint
   Future<Map<String, dynamic>?> fetchFullPublicationFromApi(
       String publicationId) async {
-    final urls = [
-      'https://nye.kompetansebiblioteket.no/umbraco/api/AppApi/GetPublicationsByPublicationId?publicationId=$publicationId'
-      // 'https://10.0.2.2:44342/umbraco/api/AppApi/GetPublicationsByPublicationId?publicationId=$publicationId',
-      // 'https://127.0.0.1:44342/umbraco/api/AppApi/GetPublicationsByPublicationId?publicationId=$publicationId',
-      // 'http://localhost:44342/umbraco/api/AppApi/GetPublicationsByPublicationId?publicationId=$publicationId',
-      // 'http://10.0.2.2:44342/umbraco/api/AppApi/GetPublicationsByPublicationId?publicationId=$publicationId',
-      // 'http://127.0.0.1:44342/umbraco/api/AppApi/GetPublicationsByPublicationId?publicationId=$publicationId',
-    ];
+    print(
+        '🔧 Debug mode: ${USE_LOCAL_SERVER ? "LOCAL (10.0.2.2:44342)" : "PRODUCTION (nye.kompetansebiblioteket.no)"}');
+
+    final urls = USE_LOCAL_SERVER
+        ? [
+            'https://10.0.2.2:44342/umbraco/api/AppApi/GetPublicationsByPublicationIdExport?publicationId=$publicationId',
+            'https://127.0.0.1:44342/umbraco/api/AppApi/GetPublicationsByPublicationIdExport?publicationId=$publicationId',
+            'http://localhost:44342/umbraco/api/AppApi/GetPublicationsByPublicationIdExport?publicationId=$publicationId',
+            'http://10.0.2.2:44342/umbraco/api/AppApi/GetPublicationsByPublicationIdExport?publicationId=$publicationId',
+          ]
+        : [
+            'https://nye.kompetansebiblioteket.no/umbraco/api/AppApi/GetPublicationsByPublicationIdExport?publicationId=$publicationId',
+          ];
 
     for (String url in urls) {
       try {
@@ -912,14 +921,19 @@ class PublicationService {
     String publicationId, {
     required Function(double progress, String status) onProgress,
   }) async {
-    final urls = [
-      'https://nye.kompetansebiblioteket.no/umbraco/api/AppApi/GetPublicationsByPublicationId?publicationId=$publicationId'
-      // 'https://10.0.2.2:44342/umbraco/api/AppApi/GetPublicationsByPublicationId?publicationId=$publicationId',
-      // 'https://127.0.0.1:44342/umbraco/api/AppApi/GetPublicationsByPublicationId?publicationId=$publicationId',
-      // 'http://localhost:44342/umbraco/api/AppApi/GetPublicationsByPublicationId?publicationId=$publicationId',
-      // 'http://10.0.2.2:44342/umbraco/api/AppApi/GetPublicationsByPublicationId?publicationId=$publicationId',
-      // 'http://127.0.0.1:44342/umbraco/api/AppApi/GetPublicationsByPublicationId?publicationId=$publicationId',
-    ];
+    print(
+        '🔧 Debug mode: ${USE_LOCAL_SERVER ? "LOCAL (10.0.2.2:44342)" : "PRODUCTION (nye.kompetansebiblioteket.no)"}');
+
+    final urls = USE_LOCAL_SERVER
+        ? [
+            'https://10.0.2.2:44342/umbraco/api/AppApi/GetPublicationsByPublicationIdExport?publicationId=$publicationId',
+            'https://127.0.0.1:44342/umbraco/api/AppApi/GetPublicationsByPublicationIdExport?publicationId=$publicationId',
+            'http://localhost:44342/umbraco/api/AppApi/GetPublicationsByPublicationIdExport?publicationId=$publicationId',
+            'http://10.0.2.2:44342/umbraco/api/AppApi/GetPublicationsByPublicationIdExport?publicationId=$publicationId',
+          ]
+        : [
+            'https://nye.kompetansebiblioteket.no/umbraco/api/AppApi/GetPublicationsByPublicationIdExport?publicationId=$publicationId',
+          ];
 
     for (int urlIndex = 0; urlIndex < urls.length; urlIndex++) {
       final url = urls[urlIndex];
