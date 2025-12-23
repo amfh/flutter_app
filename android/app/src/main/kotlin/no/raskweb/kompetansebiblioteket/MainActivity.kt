@@ -1,4 +1,4 @@
-package com.example.flutter_app
+package no.raskweb.kompetansebiblioteket
 
 import io.flutter.embedding.android.FlutterActivity
 

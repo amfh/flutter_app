@@ -378,7 +378,7 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
 
       try {
         // Use the ACTUAL file path from the file:// URL
-        // filePath is like: /data/user/0/com.example.flutter_app/app_flutter/content_img_...img
+        // filePath is like: /data/user/0/kompetansebiblioteket/app_flutter/content_img_...img
         final imageFile = File(filePath);
 
         print('🖼️   Checking file at: ${imageFile.path}');
@@ -1093,6 +1093,7 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
   }
 
   // Build content with custom table parsing
+  // ignore: unused_element
   Widget _buildContentWithTables(String htmlContent, BuildContext context) {
     List<Widget> widgets = [];
 
@@ -1582,6 +1583,7 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
   }
 
   // Extract text from MathML content
+  // ignore: unused_element
   String _extractTextFromMathML(String mathml) {
     String result = mathml;
 
@@ -1637,6 +1639,7 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
   }
 
   // Build math text with subscripts
+  // ignore: unused_element
   Widget _buildMathText(String text, double fontSize) {
     // Check for subscript pattern (like Dh)
     final subscriptPattern = RegExp(r'([A-Za-z]+)([a-z])$');
@@ -3220,6 +3223,7 @@ class _NewSubchapterDetailScreenState extends State<NewSubchapterDetailScreen> {
     }
   }
 
+  // ignore: unused_element
   void _shareContent(BuildContext context) {
     // For now, just show a message
     ScaffoldMessenger.of(context).showSnackBar(

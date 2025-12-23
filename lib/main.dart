@@ -447,7 +447,7 @@ class _HomePageState extends State<HomePage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'Logger inn...',
+                  'Klikk på knappen under for å logge inn!',
                   style: TextStyle(
                     fontSize: 18.0,
                     fontWeight: FontWeight.bold,
