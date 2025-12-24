@@ -20,6 +20,8 @@ class UserSession {
   String? userEmail;
   String? userName;
   List<String>? extensionProducts;
+  List<Map<String, dynamic>>?
+      extensionProductsData; // Full product data with dates
   bool _isInitialized = false;
 
   // Initialize session from persistent storage
@@ -38,6 +40,19 @@ class UserSession {
     if (productsString != null) {
       extensionProducts =
           productsString.split(',').where((s) => s.isNotEmpty).toList();
+    }
+
+    // Load full extension products data with dates
+    final productsDataString = prefs.getString('extensionProductsData');
+    if (productsDataString != null) {
+      try {
+        final decoded = json.decode(productsDataString);
+        if (decoded is List) {
+          extensionProductsData = decoded.cast<Map<String, dynamic>>();
+        }
+      } catch (e) {
+        print('Error loading extensionProductsData: $e');
+      }
     }
 
     _isInitialized = true;
@@ -78,6 +93,8 @@ class UserSession {
           print('Raw extension_Products value: $productsValue');
           print('Type: ${productsValue.runtimeType}');
 
+          List<Map<String, dynamic>> fullProductsData = [];
+
           if (productsValue is String) {
             try {
               // Try to parse as JSON first (in case it's a JSON string)
@@ -85,6 +102,7 @@ class UserSession {
               if (parsed is List) {
                 extensionProducts = parsed.map((item) {
                   if (item is Map<String, dynamic> && item['Id'] != null) {
+                    fullProductsData.add(Map<String, dynamic>.from(item));
                     return item['Id'].toString();
                   } else {
                     return item.toString();
@@ -107,6 +125,7 @@ class UserSession {
           } else if (productsValue is List) {
             extensionProducts = productsValue.map((item) {
               if (item is Map<String, dynamic> && item['Id'] != null) {
+                fullProductsData.add(Map<String, dynamic>.from(item));
                 return item['Id'].toString();
               } else {
                 return item.toString();
@@ -115,9 +134,15 @@ class UserSession {
             print('Parsed extension products from list: $extensionProducts');
           }
 
+          // Store full product data with dates
+          extensionProductsData = fullProductsData;
+          print('Full extension products data: $extensionProductsData');
+
           // Save to persistent storage
           await prefs.setString(
               'extensionProducts', extensionProducts?.join(',') ?? '');
+          await prefs.setString(
+              'extensionProductsData', json.encode(fullProductsData));
           print(
               'Saved extension products to storage: ${extensionProducts?.join(',')}');
         } else {
@@ -156,6 +181,7 @@ class UserSession {
     userEmail = null;
     userName = null;
     extensionProducts = null;
+    extensionProductsData = null;
 
     await prefs.remove('idToken');
     await prefs.remove('accessToken');
@@ -163,6 +189,7 @@ class UserSession {
     await prefs.remove('userEmail');
     await prefs.remove('userName');
     await prefs.remove('extensionProducts');
+    await prefs.remove('extensionProductsData');
   }
 
   // Debug method to check what's persisted
@@ -172,7 +199,9 @@ class UserSession {
 
     return {
       'session_extensionProducts': extensionProducts,
+      'session_extensionProductsData': extensionProductsData,
       'storage_extensionProducts': prefs.getString('extensionProducts'),
+      'storage_extensionProductsData': prefs.getString('extensionProductsData'),
       'session_userEmail': userEmail,
       'session_isLoggedIn': await isLoggedIn(),
       'has_idToken': idToken != null && idToken!.isNotEmpty,
@@ -335,7 +364,7 @@ class _HomePageState extends State<HomePage> {
 
     try {
       print('🌐 Checking network connectivity before login...');
-      // First check if device is connected to a network
+      // Check if device is connected to a network
       final connectivity = Connectivity();
       final result = await connectivity.checkConnectivity();
       print('🌐 Network status: $result');

@@ -86,11 +86,12 @@ class _NewAppWrapperState extends State<NewAppWrapper> {
           print('📦 ID: "${pub.id}" | Name: "${pub.name}"');
         }
 
-        // Create user data
+        // Create user data with actual subscription dates from token
         final userData = await _userDataService.createUserData(
           email: userEmail,
           extensionProducts: extensionProducts,
           publications: publications,
+          extensionProductsData: userSession.extensionProductsData,
         );
 
         print(
@@ -139,6 +140,7 @@ class _NewAppWrapperState extends State<NewAppWrapper> {
             email: userEmail,
             extensionProducts: extensionProducts,
             publications: fallbackPublications,
+            extensionProductsData: userSession.extensionProductsData,
           );
 
           print(

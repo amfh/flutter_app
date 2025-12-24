@@ -615,45 +615,45 @@ class _NewPublicationListScreenState extends State<NewPublicationListScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(
-                  Icons.calendar_today_outlined,
-                  size: 14,
-                  color: Colors.grey[600],
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Versjon: ${_formatDate(publication.updateDate)}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
+            // Row(
+            //   children: [
+            //     Icon(
+            //       Icons.calendar_today_outlined,
+            //       size: 14,
+            //       color: Colors.grey[600],
+            //     ),
+            //     const SizedBox(width: 6),
+            //     Text(
+            //       'Versjon: ${_formatDate(publication.updateDate)}',
+            //       style: TextStyle(
+            //         fontSize: 13,
+            //         color: Colors.grey[600],
+            //       ),
+            //     ),
+            //   ],
+            // ),
             const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(
-                  Icons.tag,
-                  size: 14,
-                  color: Colors.grey[600],
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'ID: ${publication.id}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey[600],
-                      fontFamily: 'monospace',
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
+            // Row(
+            //   children: [
+            //     Icon(
+            //       Icons.tag,
+            //       size: 14,
+            //       color: Colors.grey[600],
+            //     ),
+            //     const SizedBox(width: 6),
+            //     Expanded(
+            //       child: Text(
+            //         'ID: ${publication.id}',
+            //         style: TextStyle(
+            //           fontSize: 11,
+            //           color: Colors.grey[600],
+            //           fontFamily: 'monospace',
+            //         ),
+            //         overflow: TextOverflow.ellipsis,
+            //       ),
+            //     ),
+            //   ],
+            // ),
             if (!isDownloaded) ...[
               const SizedBox(height: 16),
               SizedBox(

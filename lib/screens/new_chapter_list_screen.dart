@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/new_publication_service.dart';
+import '../services/new_user_data_service.dart';
 import '../models/new_publication.dart';
 import 'new_subchapter_list_screen.dart';
 
@@ -22,6 +23,8 @@ class _NewChapterListScreenState extends State<NewChapterListScreen> {
   List<Chapter> _chapters = [];
   bool _isLoading = true;
   String? _errorMessage;
+  bool _subscriptionExpired = false;
+  List<String> _expiredSubscriptionNames = [];
 
   @override
   void initState() {
@@ -35,6 +38,20 @@ class _NewChapterListScreenState extends State<NewChapterListScreen> {
         _isLoading = true;
         _errorMessage = null;
       });
+
+      // Check subscription status for this publication
+      final subscriptionStatus = await UserDataService.instance
+          .checkPublicationSubscriptionStatus(widget.publication.id);
+
+      if (subscriptionStatus.isExpired) {
+        setState(() {
+          _subscriptionExpired = true;
+          _expiredSubscriptionNames =
+              subscriptionStatus.expiredSubscriptionNames;
+        });
+        print(
+            '⚠️ Subscription expired for ${widget.publication.name}: $_expiredSubscriptionNames');
+      }
 
       final chapters = await _publicationService
           .loadPublicationContent(widget.publication.id);
@@ -181,6 +198,11 @@ class _NewChapterListScreenState extends State<NewChapterListScreen> {
       );
     }
 
+    // Block access if subscription is expired
+    if (_subscriptionExpired) {
+      return _buildSubscriptionExpiredBlock();
+    }
+
     return ListView.builder(
       padding: const EdgeInsets.all(16.0),
       itemCount: _chapters.length,
@@ -188,6 +210,128 @@ class _NewChapterListScreenState extends State<NewChapterListScreen> {
         final chapter = _chapters[index];
         return _buildChapterCard(chapter, index);
       },
+    );
+  }
+
+  Widget _buildSubscriptionExpiredBlock() {
+    final subscriptionNames = _expiredSubscriptionNames.isNotEmpty
+        ? _expiredSubscriptionNames.join(', ')
+        : 'Ukjent abonnement';
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.orange[50],
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.orange[300]!, width: 2),
+              ),
+              child: Icon(
+                Icons.lock_clock,
+                size: 80,
+                color: Colors.orange[700],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Abonnement utgått',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange[900],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Abonnementet "$subscriptionNames" som gir tilgang til denne publikasjonen er utgått.',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[700],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Forny abonnementet for å få tilgang til innholdet.',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Gå tilbake'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange[700],
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Keep the old banner method for reference (not used now)
+  Widget _buildSubscriptionExpiredBanner() {
+    final subscriptionNames = _expiredSubscriptionNames.isNotEmpty
+        ? _expiredSubscriptionNames.join(', ')
+        : 'Ukjent abonnement';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange[300]!),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.warning_amber_rounded,
+            color: Colors.orange[700],
+            size: 28,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Abonnement utgått',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.orange[900],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Abonnementet "$subscriptionNames" som gir tilgang til denne publikasjonen er utgått. Forny abonnementet for å få tilgang til oppdatert innhold.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.orange[800],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

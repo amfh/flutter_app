@@ -47,6 +47,8 @@ class UserData {
 
   // Get all active subscription IDs
   List<String> getActiveSubscriptionIds() {
+    // TODO: TESTING - Remove this line and use DateTime.now() in production
+    //final now = DateTime(2026, 10, 21); // Test date: 21.10.2026
     final now = DateTime.now();
     return subscriptions
         .where((sub) => sub.expiryDate == null || sub.expiryDate!.isAfter(now))
@@ -66,11 +68,13 @@ class UserData {
 class Subscription {
   final String id;
   final String name;
+  final DateTime? validFrom;
   final DateTime? expiryDate;
 
   Subscription({
     required this.id,
     required this.name,
+    this.validFrom,
     this.expiryDate,
   });
 
@@ -78,6 +82,8 @@ class Subscription {
     return Subscription(
       id: json['id'] ?? '',
       name: json['name'] ?? '',
+      validFrom:
+          json['validFrom'] != null ? DateTime.parse(json['validFrom']) : null,
       expiryDate: json['expiryDate'] != null
           ? DateTime.parse(json['expiryDate'])
           : null,
@@ -88,13 +94,22 @@ class Subscription {
     return {
       'id': id,
       'name': name,
+      'validFrom': validFrom?.toIso8601String(),
       'expiryDate': expiryDate?.toIso8601String(),
     };
   }
 
   bool get isActive {
+    // TODO: TESTING - Remove this line and use DateTime.now() in production
+    //final now = DateTime(2026, 10, 21); // Test date: 21.10.2026
+    final now = DateTime.now();
+    // Check if subscription has started (validFrom)
+    if (validFrom != null && validFrom!.isAfter(now)) {
+      return false; // Subscription hasn't started yet
+    }
+    // Check if subscription has expired (expiryDate/validTo)
     if (expiryDate == null) return true;
-    return expiryDate!.isAfter(DateTime.now());
+    return expiryDate!.isAfter(now);
   }
 }
 

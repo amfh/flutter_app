@@ -468,6 +468,45 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
                             ],
                           ),
                           const SizedBox(height: 12),
+                          // Show ValidFrom (subscription start date)
+                          if (sub.validFrom != null) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.7),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.event_available_outlined,
+                                    size: 16,
+                                    color: Colors.grey[700],
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Gyldig fra: ',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey[700],
+                                    ),
+                                  ),
+                                  Text(
+                                    _formatDateOnly(sub.validFrom!),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey[800],
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                          // Show ValidTo (expiry date)
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 8),
@@ -493,7 +532,7 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
                                 ),
                                 Text(
                                   sub.expiryDate != null
-                                      ? _formatDate(sub.expiryDate!)
+                                      ? _formatDateOnly(sub.expiryDate!)
                                       : 'Ingen utløpsdato',
                                   style: TextStyle(
                                     fontSize: 13,
@@ -753,6 +792,12 @@ class _NewMyPageScreenState extends State<NewMyPageScreen> {
     if (date == null) return 'Ukjent';
 
     return '${date.day}.${date.month}.${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatDateOnly(DateTime? date) {
+    if (date == null) return 'Ukjent';
+
+    return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
   }
 
   int _getDaysLeft(DateTime expiryDate) {

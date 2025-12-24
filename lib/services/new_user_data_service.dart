@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../models/user_data.dart';
 import '../models/new_publication.dart';
+import 'api_client.dart';
 
 class UserDataService {
   static UserDataService? _instance;
@@ -14,11 +15,116 @@ class UserDataService {
   UserDataService._();
 
   static const String _userDataFileName = 'brukerdata.json';
+  static const String _publicationMappingsFileName =
+      'publication_mappings.json';
+  static const String _publicationMappingsApiUrl =
+      'https://nye.kompetansebiblioteket.no/umbraco/api/AppApi/GetPublicationMappings';
+
+  // Cache for publication mappings (MemberGroup -> PublicationName)
+  Map<String, String>? _publicationMappingsCache;
 
   // Get the path to the user data file
   Future<String> _getUserDataPath() async {
     final directory = await getApplicationDocumentsDirectory();
     return '${directory.path}/$_userDataFileName';
+  }
+
+  // Get the path to the publication mappings cache file
+  Future<String> _getPublicationMappingsPath() async {
+    final directory = await getApplicationDocumentsDirectory();
+    return '${directory.path}/$_publicationMappingsFileName';
+  }
+
+  // Fetch publication mappings from API and cache locally
+  Future<Map<String, String>> fetchAndCachePublicationMappings() async {
+    try {
+      print('🌐 Fetching publication mappings from API...');
+      final response = await ApiClient.instance.get(_publicationMappingsApiUrl);
+      final statusCode = response.statusCode;
+
+      if (statusCode == 200) {
+        final responseBody = await response.transform(utf8.decoder).join();
+        final List<dynamic> mappings = jsonDecode(responseBody);
+        final Map<String, String> mappingsMap = {};
+
+        for (final mapping in mappings) {
+          final memberGroup = mapping['MemberGroup']?.toString();
+          final publicationName = mapping['PublicationName']?.toString();
+
+          if (memberGroup != null && publicationName != null) {
+            mappingsMap[memberGroup] = publicationName;
+          }
+        }
+
+        print('✅ Fetched ${mappingsMap.length} publication mappings from API');
+
+        // Cache the mappings locally
+        await _savePublicationMappings(mappingsMap);
+        _publicationMappingsCache = mappingsMap;
+
+        return mappingsMap;
+      } else {
+        print('❌ Failed to fetch publication mappings: $statusCode');
+        // Try to load from cache
+        return await _loadPublicationMappings();
+      }
+    } catch (e) {
+      print('❌ Error fetching publication mappings: $e');
+      // Try to load from cache on error
+      return await _loadPublicationMappings();
+    }
+  }
+
+  // Save publication mappings to local cache file
+  Future<void> _savePublicationMappings(Map<String, String> mappings) async {
+    try {
+      final path = await _getPublicationMappingsPath();
+      final file = File(path);
+      final jsonString = jsonEncode(mappings);
+      await file.writeAsString(jsonString);
+      print('💾 Publication mappings saved to: $path');
+    } catch (e) {
+      print('❌ Error saving publication mappings: $e');
+    }
+  }
+
+  // Load publication mappings from local cache file
+  Future<Map<String, String>> _loadPublicationMappings() async {
+    try {
+      final path = await _getPublicationMappingsPath();
+      final file = File(path);
+
+      if (await file.exists()) {
+        final jsonString = await file.readAsString();
+        final Map<String, dynamic> jsonData = jsonDecode(jsonString);
+        final mappings =
+            jsonData.map((key, value) => MapEntry(key, value.toString()));
+        print('📂 Loaded ${mappings.length} publication mappings from cache');
+        _publicationMappingsCache = mappings;
+        return mappings;
+      }
+    } catch (e) {
+      print('❌ Error loading publication mappings from cache: $e');
+    }
+
+    return {};
+  }
+
+  // Get publication mappings (from cache or fetch if needed)
+  Future<Map<String, String>> getPublicationMappings() async {
+    if (_publicationMappingsCache != null &&
+        _publicationMappingsCache!.isNotEmpty) {
+      return _publicationMappingsCache!;
+    }
+
+    // Try to load from local cache first
+    final cachedMappings = await _loadPublicationMappings();
+    if (cachedMappings.isNotEmpty) {
+      return cachedMappings;
+    }
+
+    // If no cache, fetch from API
+    return await fetchAndCachePublicationMappings();
   }
 
   // Save user data to brukerdata.json
@@ -66,44 +172,69 @@ class UserDataService {
     required String email,
     required List<String> extensionProducts,
     required List<Publication> publications,
+    List<Map<String, dynamic>>? extensionProductsData,
   }) async {
     try {
-      // Convert extension products to subscriptions with sample expiry dates
-      final subscriptions = extensionProducts.asMap().entries.map((entry) {
-        final index = entry.key;
-        final productId = entry.value;
+      // Fetch publication mappings from API (or load from cache)
+      final publicationMappings = await fetchAndCachePublicationMappings();
+      print(
+          '📋 Got ${publicationMappings.length} publication mappings for subscription names');
 
-        // Create sample expiry dates for demonstration
-        DateTime? expiryDate;
-        if (index == 0) {
-          // First subscription expires in 6 months
-          expiryDate = DateTime.now().add(const Duration(days: 180));
-        } else if (index == 1) {
-          // Second subscription expires in 2 weeks (soon to expire)
-          expiryDate = DateTime.now().add(const Duration(days: 14));
-        } else {
-          // Additional subscriptions get 1 year
-          expiryDate = DateTime.now().add(const Duration(days: 365));
+      // Convert extension products to subscriptions using actual data from token
+      final subscriptions = <Subscription>[];
+
+      for (final productId in extensionProducts) {
+        // Find the matching product data with dates
+        Map<String, dynamic>? productData;
+        if (extensionProductsData != null) {
+          productData = extensionProductsData.firstWhere(
+            (data) => data['Id']?.toString() == productId,
+            orElse: () => <String, dynamic>{},
+          );
         }
 
-        return Subscription(
-          id: productId,
-          name: _getSubscriptionName(productId),
-          expiryDate: expiryDate,
-        );
-      }).toList();
+        DateTime? validFrom;
+        DateTime? validTo;
 
-      // Add one expired subscription for demonstration
-      subscriptions.add(
-        Subscription(
-          id: 'expired-demo',
-          name: 'Grunnkurs VVS (Utløpt)',
-          expiryDate: DateTime.now().subtract(const Duration(days: 30)),
-        ),
-      );
+        if (productData != null && productData.isNotEmpty) {
+          // Parse ValidFrom date from token data
+          if (productData['ValidFrom'] != null) {
+            try {
+              validFrom = DateTime.parse(productData['ValidFrom'].toString());
+              print('📅 Parsed ValidFrom for $productId: $validFrom');
+            } catch (e) {
+              print('❌ Error parsing ValidFrom: $e');
+            }
+          }
+
+          // Parse ValidTo date from token data
+          if (productData['ValidTo'] != null) {
+            try {
+              validTo = DateTime.parse(productData['ValidTo'].toString());
+              print('📅 Parsed ValidTo for $productId: $validTo');
+            } catch (e) {
+              print('❌ Error parsing ValidTo: $e');
+            }
+          }
+        }
+
+        // Get subscription name from publication mappings (MemberGroup -> PublicationName)
+        final subscriptionName =
+            _getSubscriptionName(productId, publicationMappings);
+
+        subscriptions.add(
+          Subscription(
+            id: productId,
+            name: subscriptionName,
+            validFrom: validFrom,
+            expiryDate: validTo,
+          ),
+        );
+      }
 
       // Filter publications that the user has access to
-      final activeSubscriptionIds = subscriptions.map((s) => s.id).toList();
+      final activeSubscriptionIds =
+          subscriptions.where((s) => s.isActive).map((s) => s.id).toList();
       final availablePublications = publications
           .where((pub) => pub.hasAccess(activeSubscriptionIds))
           .toList();
@@ -175,16 +306,35 @@ class UserDataService {
     }
   }
 
-  // Helper method to get user-friendly subscription names
-  String _getSubscriptionName(String productId) {
-    // Map known product IDs to friendly names
-    const productNames = {
-      'b0429ab1-b47c-473f-8ec3-08dc9c1adbcb': 'Enbrukerpakke',
-      'a2dd0c91-04c8-47df-be2b-08dd055ab2cc': 'Enbrukerpakke (Gratis)',
-      'd65933bc-07b6-45ea-4367-08dcfd7f421b': 'Premium Pakke',
-    };
+  // Helper method to get user-friendly subscription names from publication mappings
+  // The productId (from extension_Products) is matched against MemberGroup in the API response
+  String _getSubscriptionName(
+      String productId, Map<String, String> publicationMappings) {
+    // First try to get the name from fetched publication mappings
+    // The productId matches the MemberGroup field in the API response
+    if (publicationMappings.containsKey(productId)) {
+      final name = publicationMappings[productId]!;
+      print('✅ Found subscription name for $productId: $name');
+      return name;
+    }
 
-    return productNames[productId] ?? 'Ukjent abonnement ($productId)';
+    // Fallback to hardcoded names for known product IDs (in case API doesn't have them)
+    // const fallbackProductNames = {
+    //   'b0429ab1-b47c-473f-8ec3-08dc9c1adbcb': 'Enbrukerpakke',
+    //   'a2dd0c91-04c8-47df-be2b-08dd055ab2cc': 'Enbrukerpakke (Gratis)',
+    //   'd65933bc-07b6-45ea-4367-08dcfd7f421b': 'Premium Pakke',
+    //   'ffc60e4a-3eec-4796-c881-08de27364902': 'VVS Kompetansepakke',
+    //   'a11c59fb-62cd-4934-da10-08dcb14cb31c': 'Teknisk Pakke',
+    // };
+
+    // if (fallbackProductNames.containsKey(productId)) {
+    //   print('⚠️ Using fallback name for $productId');
+    //   return fallbackProductNames[productId]!;
+    // }
+
+    // Last resort: show truncated ID
+    print('⚠️ No name found for product $productId');
+    return productId;
   }
 
   // Get accessible publications for current user
@@ -199,5 +349,99 @@ class UserDataService {
   Future<bool> hasAccessToPublication(String publicationId) async {
     final accessiblePublications = await getAccessiblePublications();
     return accessiblePublications.any((pub) => pub.id == publicationId);
+  }
+
+  /// Check subscription status for a publication
+  /// Returns a record with:
+  /// - hasAccess: true if user has any subscription that grants access
+  /// - isExpired: true if ALL subscriptions that grant access are expired
+  /// - expiredSubscriptionNames: list of expired subscription names that granted access
+  Future<
+      ({
+        bool hasAccess,
+        bool isExpired,
+        List<String> expiredSubscriptionNames
+      })> checkPublicationSubscriptionStatus(String publicationId) async {
+    final userData = await loadUserData();
+    if (userData == null) {
+      return (
+        hasAccess: false,
+        isExpired: false,
+        expiredSubscriptionNames: <String>[]
+      );
+    }
+
+    // Find the publication in availablePublications
+    final publication = userData.availablePublications.firstWhere(
+      (pub) => pub.id == publicationId,
+      orElse: () => Publication(
+        id: '',
+        name: '',
+        createDate: DateTime.now(),
+        updateDate: DateTime.now(),
+      ),
+    );
+
+    if (publication.id.isEmpty) {
+      print('⚠️ Publication $publicationId not found in availablePublications');
+      return (
+        hasAccess: false,
+        isExpired: false,
+        expiredSubscriptionNames: <String>[]
+      );
+    }
+
+    // If no restrictions, everyone has access
+    if (publication.restrictPublicAccessIds.isEmpty) {
+      return (
+        hasAccess: true,
+        isExpired: false,
+        expiredSubscriptionNames: <String>[]
+      );
+    }
+
+    // Find matching subscriptions
+    final matchingSubscriptions = userData.subscriptions
+        .where(
+          (sub) => publication.restrictPublicAccessIds.contains(sub.id),
+        )
+        .toList();
+
+    if (matchingSubscriptions.isEmpty) {
+      print('⚠️ No matching subscriptions for publication $publicationId');
+      return (
+        hasAccess: false,
+        isExpired: false,
+        expiredSubscriptionNames: <String>[]
+      );
+    }
+
+    // Check if any subscription is still active
+    final now = DateTime.now();
+    final activeSubscriptions =
+        matchingSubscriptions.where((sub) => sub.isActive).toList();
+    final expiredSubscriptions =
+        matchingSubscriptions.where((sub) => !sub.isActive).toList();
+
+    // Get names of expired subscriptions
+    final expiredNames = expiredSubscriptions.map((sub) => sub.name).toList();
+
+    if (activeSubscriptions.isNotEmpty) {
+      // At least one subscription is still active
+      return (
+        hasAccess: true,
+        isExpired: false,
+        expiredSubscriptionNames: <String>[]
+      );
+    } else {
+      // All matching subscriptions are expired
+      print(
+          '⚠️ All subscriptions for publication $publicationId are expired: $expiredNames');
+      return (
+        hasAccess: true,
+        isExpired: true,
+        expiredSubscriptionNames: expiredNames
+      );
+    }
   }
 }
