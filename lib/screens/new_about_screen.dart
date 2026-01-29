@@ -38,34 +38,14 @@ class NewAboutScreen extends StatelessWidget {
                       ],
                     ),
                     Divider(),
-                    Text(
-                      'Kompetansebiblioteket inneholder blant annet:',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    _PublicationItem(title: 'Rørhåndboka'),
-                    _PublicationItem(title: 'Kuldehåndboka'),
-                    _PublicationItem(title: 'Prenøk'),
-                    _PublicationItem(title: 'Ventøk'),
-                    _PublicationItem(
-                        title: 'Vannbaserte oppvarmings- og kjølesystemer'),
-                    _PublicationItem(title: 'Varmenormen'),
                     SizedBox(height: 16),
                     Text(
-                      'Det vender seg til alle som jobber innen VVS- og kuldefaget. Søk og oppslag går lynraskt, og dine bokmerker følger deg, uansett hvilken plattform du velger.',
+                      'Kompetansebiblioteket er et digitalt bibliotek som gir tilgang til faglitteratur, pensumbøker og publikasjoner innen VVS, energi- og miljøteknikk. Appen er utviklet for fagfolk og studenter som trenger rask og enkel tilgang til oppdatert faginnhold og nyttige verktøy i arbeidshverdagen.',
                       style: TextStyle(fontSize: 16),
                     ),
                     SizedBox(height: 12),
                     Text(
-                      'Med Appen har du tilgang til Kompetansebiblioteket, selv om du ikke er tilkoblet Internett.',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    SizedBox(height: 12),
-                    Text(
-                      'Alle kan søke i Kompetansebiblioteket, men tilgang til innholdet krever et abonnement.',
+                      'Faginnhold kan lastes ned for offline bruk, slik at du alltid har tilgang – også uten internettforbindelse. Tilgang til innholdet krever et aktivt abonnement med tilhørende publikasjoner.',
                       style: TextStyle(fontSize: 16),
                     ),
                     SizedBox(height: 16),

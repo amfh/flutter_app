@@ -814,12 +814,12 @@ class _NewPublicationListScreenState extends State<NewPublicationListScreen> {
                     style: const TextStyle(
                         fontSize: 12, fontWeight: FontWeight.w500),
                     textAlign: TextAlign.center),
-                if (publication.dataSizeInBytes != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                      'Størrelse: ${_formatDataSize(publication.dataSizeInBytes!)}',
-                      style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                ],
+                // if (publication.dataSizeInBytes != null) ...[
+                //   const SizedBox(height: 4),
+                //   Text(
+                //       'Størrelse: ${_formatDataSize(publication.dataSizeInBytes!)}',
+                //       style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                // ],
               ],
             ),
             actions: [

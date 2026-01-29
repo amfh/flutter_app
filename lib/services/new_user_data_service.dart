@@ -15,6 +15,7 @@ class UserDataService {
   UserDataService._();
 
   static const String _userDataFileName = 'brukerdata.json';
+  static const String _bookmarksFileName = 'bookmarks.json';
   static const String _publicationMappingsFileName =
       'publication_mappings.json';
   static const String _publicationMappingsApiUrl =
@@ -27,6 +28,12 @@ class UserDataService {
   Future<String> _getUserDataPath() async {
     final directory = await getApplicationDocumentsDirectory();
     return '${directory.path}/$_userDataFileName';
+  }
+
+  // Get the path to the bookmarks file
+  Future<String> _getBookmarksPath() async {
+    final directory = await getApplicationDocumentsDirectory();
+    return '${directory.path}/$_bookmarksFileName';
   }
 
   // Get the path to the publication mappings cache file
@@ -137,9 +144,27 @@ class UserDataService {
       await file.writeAsString(jsonString);
 
       print('📱 User data saved to: $path');
+
+      // Also sync bookmarks to the separate file (for preservation across logout/login)
+      if (userData.bookmarks.isNotEmpty) {
+        await _syncBookmarksFile(userData.bookmarks);
+      }
     } catch (e) {
       print('❌ Error saving user data: $e');
       throw Exception('Failed to save user data: $e');
+    }
+  }
+
+  // Sync bookmarks to the separate preservation file
+  Future<void> _syncBookmarksFile(List<BookmarkedSubchapter> bookmarks) async {
+    try {
+      final path = await _getBookmarksPath();
+      final file = File(path);
+      final bookmarksJson = bookmarks.map((b) => b.toJson()).toList();
+      await file.writeAsString(jsonEncode(bookmarksJson));
+      print('📚 Synced ${bookmarks.length} bookmarks to preservation file');
+    } catch (e) {
+      print('❌ Error syncing bookmarks file: $e');
     }
   }
 
@@ -239,10 +264,15 @@ class UserDataService {
           .where((pub) => pub.hasAccess(activeSubscriptionIds))
           .toList();
 
+      // Load preserved bookmarks from separate file
+      final preservedBookmarks = await _loadPreservedBookmarks();
+      print('📚 Loaded ${preservedBookmarks.length} preserved bookmarks');
+
       final userData = UserData(
         email: email,
         subscriptions: subscriptions,
         availablePublications: availablePublications,
+        bookmarks: preservedBookmarks,
         lastUpdated: DateTime.now(),
       );
 
@@ -268,6 +298,7 @@ class UserDataService {
         email: currentUserData.email,
         subscriptions: currentUserData.subscriptions,
         availablePublications: availablePublications,
+        bookmarks: currentUserData.bookmarks, // Preserve existing bookmarks
         lastUpdated: DateTime.now(),
       );
 
@@ -279,18 +310,63 @@ class UserDataService {
     }
   }
 
-  // Delete user data (for logout)
+  // Delete user data (for logout) - preserves bookmarks
   Future<void> deleteUserData() async {
     try {
+      // First, preserve bookmarks to separate file before deleting user data
+      await _preserveBookmarks();
+
       final path = await _getUserDataPath();
       final file = File(path);
 
       if (await file.exists()) {
         await file.delete();
-        print('📱 User data deleted');
+        print('📱 User data deleted (bookmarks preserved)');
       }
     } catch (e) {
       print('❌ Error deleting user data: $e');
+    }
+  }
+
+  // Save bookmarks to a separate file (preserved across logout/login)
+  Future<void> _preserveBookmarks() async {
+    try {
+      final userData = await loadUserData();
+      if (userData == null || userData.bookmarks.isEmpty) {
+        print('📚 No bookmarks to preserve');
+        return;
+      }
+
+      final path = await _getBookmarksPath();
+      final file = File(path);
+      final bookmarksJson = userData.bookmarks.map((b) => b.toJson()).toList();
+      await file.writeAsString(jsonEncode(bookmarksJson));
+      print('📚 Preserved ${userData.bookmarks.length} bookmarks to: $path');
+    } catch (e) {
+      print('❌ Error preserving bookmarks: $e');
+    }
+  }
+
+  // Load preserved bookmarks from separate file
+  Future<List<BookmarkedSubchapter>> _loadPreservedBookmarks() async {
+    try {
+      final path = await _getBookmarksPath();
+      final file = File(path);
+
+      if (!await file.exists()) {
+        print('📚 No preserved bookmarks file found');
+        return [];
+      }
+
+      final jsonString = await file.readAsString();
+      final List<dynamic> jsonList = jsonDecode(jsonString);
+      final bookmarks =
+          jsonList.map((json) => BookmarkedSubchapter.fromJson(json)).toList();
+      print('📚 Loaded ${bookmarks.length} preserved bookmarks from: $path');
+      return bookmarks;
+    } catch (e) {
+      print('❌ Error loading preserved bookmarks: $e');
+      return [];
     }
   }
 
