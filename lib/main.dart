@@ -6,6 +6,7 @@ import 'package:aad_b2c_webview/aad_b2c_webview.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:http/http.dart' as http;
 // import 'services/update_check_service.dart'; // Disabled background updates
 
 // Singleton for storing user session information with persistent storage
@@ -452,6 +453,8 @@ class _HomePageState extends State<HomePage> {
 
   void _performLogin() {
     // Azure AD B2C Configuration
+    // Note: Using custom URL scheme for redirect. Make sure this matches
+    // the redirect URL configured in Azure AD B2C portal.
     final params = B2CWebViewParams(
       responseType: 'code',
       tenantBaseUrl:
@@ -464,39 +467,19 @@ class _HomePageState extends State<HomePage> {
       isLoginFlow: true,
     );
 
-    // Show the Azure AD B2C login directly in a dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false, // Prevent dismissing by tapping outside
-      builder: (BuildContext context) {
-        return Dialog(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Klikk på knappen under for å logge inn!',
-                  style: TextStyle(
-                    fontSize: 18.0,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 20.0),
-                AADB2CBase.button(
-                  params: params,
-                  settings: ButtonSettingsEntity(
-                    onError: _onLoginError,
-                    onSuccess: _onLoginSuccess,
-                    onKeepLoading: (String? url) =>
-                        url?.startsWith(params.redirectUrl) ?? false,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+    print('🔐 Starting Azure AD B2C login flow...');
+    print('🔐 Redirect URL: ${params.redirectUrl}');
+    print('🔐 Platform: ${Platform.isIOS ? "iOS" : "Android"}');
+
+    // Navigate to full-screen login page for better iOS compatibility
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => _B2CLoginScreen(
+          params: params,
+          onSuccess: _onLoginSuccess,
+          onError: _onLoginError,
+        ),
+      ),
     );
   }
 
@@ -550,12 +533,46 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _onLoginError(BuildContext context, String? error) {
-    // Close the login dialog
-    Navigator.of(context).pop();
+    print('🔐 === LOGIN ERROR DEBUG ===');
+    print('🔐 Raw error: $error');
+    print('🔐 Platform: ${Platform.isIOS ? "iOS" : "Android"}');
+    print('🔐 === END LOGIN ERROR DEBUG ===');
+
+    // Close the login dialog if it's still open
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+
+    // Parse error message and provide better feedback
+    String displayError;
+    if (error == null || error.isEmpty) {
+      displayError = 'Ukjent feil ved innlogging';
+    } else if (error.contains('problemer med å logge deg på') ||
+        error.toLowerCase().contains('error') ||
+        error.toLowerCase().contains('failed')) {
+      // This error typically comes from Azure B2C when:
+      // 1. The redirect URL handling fails
+      // 2. The token exchange fails
+      // 3. Network issues during authentication
+      displayError =
+          'Innlogging feilet. Vennligst lukk appen helt og prøv igjen. '
+          'Hvis problemet vedvarer, sjekk internettforbindelsen.';
+      print(
+          '🔐 Hint: If this persists on iOS simulator, try testing on a real device');
+    } else {
+      displayError = error;
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Innlogging feilet: ${error ?? 'Ukjent feil'}'),
+        content: Text('Innlogging feilet: $displayError'),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Prøv igjen',
+          onPressed: () {
+            _checkConnectivityAndLogin();
+          },
+        ),
       ),
     );
   }
@@ -1116,7 +1133,259 @@ class _B2CLoginPageWrapperState extends State<B2CLoginPageWrapper> {
   }
 }
 
-// Separate login page using aad_b2c_webview
+// Full-screen login screen using native webview_flutter for iOS compatibility
+class _B2CLoginScreen extends StatefulWidget {
+  final B2CWebViewParams params;
+  final Function(BuildContext, dynamic, dynamic, dynamic) onSuccess;
+  final Function(BuildContext, String?) onError;
+
+  const _B2CLoginScreen({
+    required this.params,
+    required this.onSuccess,
+    required this.onError,
+  });
+
+  @override
+  State<_B2CLoginScreen> createState() => _B2CLoginScreenState();
+}
+
+class _B2CLoginScreenState extends State<_B2CLoginScreen> {
+  late final WebViewController _controller;
+  bool _isLoading = true;
+  bool _hasHandledRedirect = false;
+  late final PkcePair _pkcePair;
+  late final String _authUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeLogin();
+  }
+
+  Future<void> _initializeLogin() async {
+    // Generate PKCE code verifier and challenge - must be unique for each login attempt
+    _pkcePair = PkcePair.generate();
+
+    // Build the authorization URL with a unique state parameter to prevent caching issues
+    final baseUrl = widget.params.tenantBaseUrl;
+    final clientId = widget.params.clientId;
+    final redirectUrl = widget.params.redirectUrl;
+    final userFlow = widget.params.userFlowName;
+    final scopes = widget.params.scopes.join(' ');
+    final uniqueState = DateTime.now().millisecondsSinceEpoch.toString();
+
+    _authUrl = '$baseUrl/$userFlow/oauth2/v2.0/authorize?'
+        'client_id=$clientId&'
+        'response_type=code&'
+        'redirect_uri=${Uri.encodeComponent(redirectUrl)}&'
+        'scope=${Uri.encodeComponent(scopes)}&'
+        'code_challenge=${_pkcePair.codeChallenge}&'
+        'code_challenge_method=S256&'
+        'response_mode=query&'
+        'state=$uniqueState&'
+        'prompt=login'; // Force fresh login
+
+    print('🔐 Auth URL: $_authUrl');
+    print('🔐 PKCE code_challenge: ${_pkcePair.codeChallenge}');
+
+    // Initialize WebViewController
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (String url) {
+            print('🔐 Page started: $url');
+            if (mounted) {
+              setState(() {
+                _isLoading = true;
+              });
+            }
+          },
+          onPageFinished: (String url) {
+            print('🔐 Page finished: $url');
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+              });
+            }
+          },
+          onNavigationRequest: (NavigationRequest request) {
+            print('🔐 Navigation request: ${request.url}');
+
+            // Check if this is the redirect URL with auth code
+            if (request.url.startsWith(widget.params.redirectUrl)) {
+              print('🔐 Detected redirect URL!');
+              _handleRedirect(request.url);
+              return NavigationDecision.prevent;
+            }
+
+            return NavigationDecision.navigate;
+          },
+          onWebResourceError: (WebResourceError error) {
+            print('🔐 WebResource error: ${error.description}');
+            // Don't treat custom scheme navigation as error
+            if (!error.description.contains('myapp://')) {
+              if (!_hasHandledRedirect && mounted) {
+                _hasHandledRedirect = true;
+                widget.onError(context, error.description);
+              }
+            }
+          },
+        ),
+      );
+
+    // Clear cookies and cache before loading to ensure fresh login
+    await _controller.clearCache();
+    await _controller.clearLocalStorage();
+
+    print('🔐 Cleared WebView cache and storage');
+
+    // Load the auth URL
+    await _controller.loadRequest(Uri.parse(_authUrl));
+  }
+
+  Future<void> _handleRedirect(String url) async {
+    if (_hasHandledRedirect) return;
+    _hasHandledRedirect = true;
+
+    print('🔐 Handling redirect: $url');
+
+    try {
+      final uri = Uri.parse(url);
+      final code = uri.queryParameters['code'];
+      final error = uri.queryParameters['error'];
+      final errorDescription = uri.queryParameters['error_description'];
+
+      if (error != null) {
+        print('🔐 Auth error: $error - $errorDescription');
+        if (mounted) {
+          widget.onError(context, errorDescription ?? error);
+        }
+        return;
+      }
+
+      if (code == null) {
+        print('🔐 No code in redirect URL');
+        if (mounted) {
+          widget.onError(context, 'Ingen autorisasjonskode mottatt');
+        }
+        return;
+      }
+
+      print('🔐 Got authorization code, exchanging for tokens...');
+
+      // Exchange code for tokens
+      final tokens = await _exchangeCodeForTokens(code);
+
+      if (tokens != null && mounted) {
+        print('🔐 Token exchange successful!');
+        widget.onSuccess(
+          context,
+          _TokenWrapper(tokens['access_token']),
+          _TokenWrapper(tokens['id_token']),
+          _TokenWrapper(tokens['refresh_token']),
+        );
+      } else if (mounted) {
+        widget.onError(context, 'Kunne ikke utveksle token');
+      }
+    } catch (e) {
+      print('🔐 Error handling redirect: $e');
+      if (mounted) {
+        widget.onError(context, 'Feil ved innlogging: $e');
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>?> _exchangeCodeForTokens(String code) async {
+    try {
+      final tokenUrl =
+          '${widget.params.tenantBaseUrl}/${widget.params.userFlowName}/oauth2/v2.0/token';
+
+      print('🔐 Token endpoint: $tokenUrl');
+
+      final response = await http.post(
+        Uri.parse(tokenUrl),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: {
+          'client_id': widget.params.clientId,
+          'grant_type': 'authorization_code',
+          'code': code,
+          'redirect_uri': widget.params.redirectUrl,
+          'code_verifier': _pkcePair.codeVerifier,
+          'scope': widget.params.scopes.join(' '),
+        },
+      );
+
+      print('🔐 Token response status: ${response.statusCode}');
+      print('🔐 Token response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        final errorBody = json.decode(response.body);
+        print('🔐 Token error: ${errorBody['error_description']}');
+        return null;
+      }
+    } catch (e) {
+      print('🔐 Token exchange error: $e');
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Logg inn'),
+        backgroundColor: const Color(0xFF0974ba),
+        foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+        ),
+      ),
+      body: Stack(
+        children: [
+          WebViewWidget(controller: _controller),
+          if (_isLoading)
+            Container(
+              color: Colors.white.withOpacity(0.8),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(
+                      color: Color(0xFF0974ba),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Laster innlogging...',
+                      style: TextStyle(
+                        color: Color(0xFF0974ba),
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// Simple wrapper class to mimic the token structure from aad_b2c_webview
+class _TokenWrapper {
+  final String? value;
+  _TokenWrapper(this.value);
+}
+
+// Separate login page using aad_b2c_webview (kept for backward compatibility)
 class B2CLoginPage extends StatelessWidget {
   final B2CWebViewParams params;
   final Function(BuildContext, dynamic, dynamic, dynamic) onSuccess;

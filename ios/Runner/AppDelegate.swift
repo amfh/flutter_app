@@ -10,4 +10,24 @@ import UIKit
     GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
+
+  // Handle deep linking from custom URL schemes (myapp://)
+  override func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey : Any] = [:]
+  ) -> Bool {
+    print("🔐 AppDelegate: Received URL: \(url)")
+    return super.application(app, open: url, options: options)
+  }
+
+  // Handle universal links
+  override func application(
+    _ application: UIApplication,
+    continue userActivity: NSUserActivity,
+    restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
+  ) -> Bool {
+    print("🔐 AppDelegate: Continue user activity: \(userActivity.activityType)")
+    return super.application(application, continue: userActivity, restorationHandler: restorationHandler)
+  }
 }
