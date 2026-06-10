@@ -37,7 +37,7 @@ class _NewMainScaffoldState extends State<NewMainScaffold> {
 
   Widget _buildDrawer(BuildContext context) {
     return Drawer(
-      width: MediaQuery.of(context).size.width * 0.5 +
+      width: MediaQuery.of(context).size.width * 0.6 +
           30, // Make drawer 50% of screen width + 30 pixels
       child: ListView(
         padding: EdgeInsets.zero,

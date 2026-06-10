@@ -376,30 +376,12 @@ class _NewChapterListScreenState extends State<NewChapterListScreen> {
               Text(
                 'Kapittel ${chapter.number}',
                 style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[500],
+                  fontSize: 14,
+                  color: Colors.grey[700],
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ],
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(
-                  Icons.article,
-                  size: 16,
-                  color: Colors.grey[600],
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '${chapter.subchapters.length} underkapitler',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
           ],
         ),
         trailing: const Icon(Icons.arrow_forward_ios),

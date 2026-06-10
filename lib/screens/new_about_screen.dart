@@ -50,7 +50,7 @@ class NewAboutScreen extends StatelessWidget {
                     ),
                     SizedBox(height: 16),
                     Text(
-                      'Løsningen utgis av Skarland Press AS og er utviklet av Raskweb.',
+                      'Løsningen utgis av Nemitek AS og er utviklet av Raskweb.',
                       style: TextStyle(
                         fontSize: 16,
                         fontStyle: FontStyle.italic,
