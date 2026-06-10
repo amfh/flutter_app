@@ -159,50 +159,18 @@ class NewSubchapterListScreen extends StatelessWidget {
               Text(
                 'Avsnitt ${subchapter.number}',
                 style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[500],
+                  fontSize: 14,
+                  color: Colors.grey[700],
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ],
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(
-                  Icons.description,
-                  size: 16,
-                  color: Colors.grey[600],
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _getContentLength(subchapter.text),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
           ],
         ),
         trailing: const Icon(Icons.arrow_forward_ios),
         onTap: () => _openSubchapter(context, subchapter),
       ),
     );
-  }
-
-  String _getContentLength(String text) {
-    // Remove HTML tags for a rough word count
-    final plainText = text.replaceAll(RegExp(r'<[^>]*>'), '');
-    final wordCount = plainText.trim().split(RegExp(r'\s+')).length;
-
-    if (wordCount < 100) {
-      return 'Kort innhold';
-    } else if (wordCount < 500) {
-      return 'Middels innhold';
-    } else {
-      return 'Langt innhold';
-    }
   }
 
   void _openSubchapter(BuildContext context, Subchapter subchapter) {
